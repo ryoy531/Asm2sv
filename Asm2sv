@@ -1,0 +1,2577 @@
+#!/usr/bin/perl -w
+use strict;
+use warnings;
+use threads;
+use Cwd;
+use FindBin;
+use Getopt::Long;
+#use File::HomeDir;
+use Sys::Hostname;
+
+my $version = "#------------------------------------------------------------\n";
+$version .= "Asm2sv version 1.42\n";
+$version .= "last update: [2023\/1\/28]\n";
+$version .= "copyright: ryoichi yano [ryoichiy104\@gmail.com]\n";
+$version .= "#------------------------------------------------------------\n";
+
+print "\n$version";
+
+my $host = hostname();
+my $script_path = $FindBin::Bin;
+my $wpath = getcwd();
+my $status = "-";
+#my $HOME = File::HomeDir->my_home;
+my $bin_psl2sv = $script_path."/scripts/batch_psl2sv.pl";
+my $bin_psl2sv_clsr = $script_path."/scripts/batch_psl2sv_clsr.pl";
+my $bin_asm2sv = $script_path."/scripts/batch_asm2sv.pl";
+my $bin_FindCDS_mRNA = $script_path."/scripts/FindCDS_mRNA.pl";
+my $bin_findorf = $script_path."/scripts/findorf.pl";
+my $bin_psl2dot = $script_path."/scripts/psl2dot.pl";
+my $bin_Psl_tigPlot3 = $script_path."/scripts/Psl_tigPlot3.pl";
+my $bin_prepseq4annot = $script_path."/scripts/prepseq4annot.pl";
+my $bin_unitesummary = $script_path."/scripts/unitesummary.pl";
+my $bin_gfftolist = $script_path."/scripts/gfftolist.pl";
+
+my $file_permission = Check_script_permission($script_path, $wpath);
+if($file_permission > 0){
+	print "\n! abort script due to the file permission misconfiguration...\n";
+	goto END;
+}
+if(! -e $bin_psl2sv){
+	print "\n! missing [$bin_psl2sv]...\n";
+	goto END;
+}
+if($host eq 'cluster1' && ! -e $bin_psl2sv_clsr){
+	print "\n! missing [$bin_psl2sv_clsr]...\n";
+	goto END;
+}
+if(! -e $bin_asm2sv){
+	print "\n! missing [$bin_asm2sv]...\n";
+	goto END;
+}
+if(! -e $bin_FindCDS_mRNA){
+	print "\n! missing [$bin_FindCDS_mRNA]...\n";
+	goto END;
+}
+if(! -e $bin_findorf){
+	print "\n! missing [$bin_findorf]...\n";
+	goto END;
+}
+if(! -e $bin_psl2dot){
+	print "\n! missing [$bin_psl2dot]...\n";
+	goto END;
+}
+if(! -e $bin_Psl_tigPlot3){
+	print "\n! missing [$bin_Psl_tigPlot3]...\n";
+	goto END;
+}
+if(! -e $bin_prepseq4annot){
+	print "\n! missing [$bin_prepseq4annot]...\n";
+	goto END;
+}
+if(! -e $bin_unitesummary){
+	print "\n! missing [$bin_unitesummary]...\n";
+	goto END;
+}
+if(! -e $bin_gfftolist){
+	print "\n! missing [$bin_gfftolist]...\n";
+	goto END;
+}
+
+if(! $ARGV[0]){
+	Help(1, "null");
+	$status = "missing";
+	goto END;
+}
+elsif($ARGV[0] ne 'run' && $ARGV[0] ne 'check' && $ARGV[0] ne 'makecmd' && $ARGV[0] ne 'unite' && $ARGV[0] ne 'plot' && $ARGV[0] ne 'gfftolist'){
+	Help(1, "null");
+	$status = "missing";
+	goto END;
+}
+elsif($ARGV[0] eq 'run' || $ARGV[0] eq 'check'){
+	#---------------------------------------------------------//
+	my $dir;
+	my $dbfasta;
+	my $dbgff;
+	my $genelist;
+	my $qfasta;
+	my $qpsl;
+	my $chrinfo;
+	my $outplot;
+	my $prev_tsv;
+	my $neighbor_tlen;
+	my $cluster;
+	my $cpu;
+	my $cpu_gth;
+	my $stop_after_psl;
+	my $help;
+	my $test;
+	my $skip_orfsearch;
+
+	GetOptions('--db=s' => \$dbfasta, '--gff=s' => \$dbgff, '--list=s' => \$genelist, '--query=s' => \$qfasta, '--alignpsl=s' => \$qpsl, '--chralias=s' => \$chrinfo, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--thread=i' => \$cpu, '--xthread=i' => \$cpu_gth, '--plot=s' => \$outplot, '--prev=s' => \$prev_tsv, '--1' => \$cluster, '--9' => \$stop_after_psl, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
+
+	if($cluster){
+		$host = "cluster1";
+	}
+	
+	print "\n";
+	if(! $dbfasta || ! -e $dbfasta){
+		print "! missing db fasta\n";
+		$status = "missing";
+	}
+	if(! $dbgff || ! -e $dbgff){
+		print "! missing db gff\n";
+		$status = "missing";
+	}
+	if(! $genelist || ! -e $genelist){
+		print "! missing target gene ID list\n";
+		$status = "missing";
+	}
+	if(! $qfasta){
+		print "! missing query fasta\n";
+		$status = "missing";
+	}
+	elsif(! -e $qfasta){
+		print "! missing query fasta [$qfasta]\n";
+		$status = "missing";
+	}
+	if(! $qpsl || ! -e $qpsl){
+		$qpsl = "null";
+		$stop_after_psl = 0;
+	}
+	else{
+		if($stop_after_psl){
+			$stop_after_psl = 1;
+		}
+		else{
+			$stop_after_psl = 0;
+		}
+	}
+	if(! $chrinfo || ! -e $chrinfo){
+		$chrinfo = "null";
+	}
+	if($status eq 'missing'){
+		Help(2, $ARGV[0]);
+		goto END;
+	}
+	if($outplot){
+		print "! --plot is invoked\n";
+	}
+	
+	if(! $prev_tsv || ! -e $prev_tsv){
+		$prev_tsv = "null";
+	}
+	
+	unless($neighbor_tlen){
+		$neighbor_tlen = 5000;
+	}
+	elsif($neighbor_tlen =~ /\D/){
+		$neighbor_tlen = 5000;
+	}
+	elsif($neighbor_tlen < 1000){
+		$neighbor_tlen = 5000;
+	}
+	elsif($neighbor_tlen > 10000){
+		$neighbor_tlen = 10000;
+	}
+	
+	unless($cpu){
+		$cpu = 16;
+	}
+	elsif($cpu =~ /\D/){
+		$cpu = 16;
+	}
+	elsif($cpu < 0){
+		$cpu = 16;
+	}
+	elsif($cpu > 128){
+		$cpu = 128;
+	}
+	unless($cpu_gth){
+		$cpu_gth = $cpu;
+	}
+	elsif($cpu_gth > $cpu){
+		$cpu_gth = $cpu;
+	}
+	elsif($cpu_gth < 0){
+		$cpu_gth = 1;
+	}
+	unless($test){
+		$test = 0;
+	}
+
+	my $log;
+	$log .= "! reference fasta     : [$dbfasta]\n";
+	$log .= "! reference gff       : [$dbgff]\n";
+	$log .= "! target gene list    : [$genelist]\n";
+	$log .= "! query fasta         : [$qfasta]\n";
+	$log .= "! query psl           : [$qpsl]\n";
+	$log .= "! neighbor seq target : [$neighbor_tlen] bp (e.g. promoter region)\n";
+	$log .= "! chr alias info      : [$chrinfo]\n";
+	$log .= "! previous result     : [$prev_tsv]\n";
+
+	print $log,"\n";
+
+	my @APP;
+	push(@APP, "samtools");
+	push(@APP, "gffread");
+	push(@APP, "gth");
+	push(@APP, "blat");
+	push(@APP, "blat2hints");
+	push(@APP, "matcher");
+	push(@APP, "lastdb");
+	push(@APP, "lastal");
+	push(@APP, "makeblastdb");
+	push(@APP, "blastn");
+	push(@APP, "maf-convert");
+
+	my $hbin = {};
+	foreach my $app (@APP){
+		$hbin->{$app}[0] = $app;
+	}
+	my $hpath = {};
+	my $hbinpath = Search_app2($hbin, \@APP, $hpath, $script_path, "");
+	if($hbinpath->{err}){
+		print "! abort script due to missing program(s)..., please confirm program is in PATH.\n";
+		goto END;
+	}
+	if($ARGV[0] eq 'check'){
+		print "\n! All OK. Finish 'check' here.\n";
+		goto END;
+	}
+	
+	#---------------------------------------------------------------//
+	my $dbpref = Path2pref($dbfasta);
+	my $qpref = Path2pref($qfasta);
+	
+	unless($dir){
+		$dir = "result_asm2sv_".$dbpref."_vs_".$qpref;			# do not change this
+	}
+	unless(-e $dir){
+		system("mkdir $dir");
+	}
+	chdir $dir;
+	
+	my $ntry = 4;
+	my $hinitspan = {};
+#	$hinitspan->{0} = 50000;
+#	$hinitspan->{1} = 20000;
+#	$hinitspan->{2} = 1000;
+	$hinitspan->{0} = 20000;
+	$hinitspan->{1} = 20000;
+	$hinitspan->{2} = 5000;
+	$hinitspan->{3} = 1000;
+	
+	$dbfasta = CpFile($dbfasta);
+	$dbgff = CpFile($dbgff);
+	$genelist = CpFile($genelist);
+	$qfasta = CpFile($qfasta);
+	$qpsl = CpFile($qpsl);
+	$chrinfo = CpFile($chrinfo);
+	$prev_tsv = CpFile($prev_tsv);
+	
+	my $judge_orft0 = "false";
+	for(my $i = 0; $i < $ntry; $i++){
+		print "\n#############################################################\n";
+#		if($hinitspan->{$i} < $neighbor_tlen){			# skip $hinitspan->{$i}=1000 if -n 5000
+#			print "! skip round [$i] as $hinitspan->{$i} < -n $neighbor_tlen\n";
+#			next;
+#		}
+		
+		my $subdir = "round_$i";
+		unless(-e $subdir){
+			system("mkdir $subdir");
+		}
+		
+		my $rfile = "./$subdir/summary_genome2sv_".$subdir."_".$qpref.".tsv";
+		
+		if(-e $rfile){
+			if($skip_orfsearch){
+				print "! [$rfile] already exists, skip round [$i]...\n";
+				next;
+			}
+#			else{
+#				my $judge_prevorf = CheckORFsearch_prevresult($rfile);
+#				if($i == 0 && $judge_prevorf eq 'true'){
+#					$judge_orft0 = "true";
+#				}
+#				if($judge_prevorf eq 'true'){
+#					print "! [$rfile] already exists with ORF information, skip round [$i]...\n";
+#					next;
+#				}
+#				elsif($i > 0 && $judge_orft0 eq 'true'){
+#					print "! [$rfile] already exists with ORF information (0), skip round [$i]...\n";
+#					next;
+#				}
+#				else{
+#					print "! [$rfile] already exists, but ORF search had not been performed yet...\n";
+#				}
+#			}
+		}
+		
+		my $tmplist = $genelist;
+		my $initspan = $hinitspan->{$i};
+		if($i == 0){
+			print "! round [$i] : range=[$initspan] bp, quick scanning based on whole genome alignment...\n";
+			if($prev_tsv && -e $prev_tsv){
+				print "! found previous result [$prev_tsv]\n";
+				my $hprev = {};
+				$hprev = CollectPrevJudge_v3($prev_tsv, $hprev, $i, 0, $dbgff, $hbinpath, $dbpref, $dbfasta, "prev");
+				
+				$tmplist = "list_absentJudge_$i.csv";
+				my $cnt_absent = Search_absentJudge($hprev, $genelist, $tmplist);
+			}
+			
+			if(-e $tmplist){
+				my $cmd;
+				if($qpsl && -e $qpsl){
+					if($host eq 'cluster1'){
+						$bin_psl2sv = $bin_psl2sv_clsr;
+					}
+					$cmd = "$bin_psl2sv -d $dbfasta -g $dbgff -l $tmplist -q $qfasta -a $qpsl -t $cpu --span $initspan -o $subdir";
+					
+					if($neighbor_tlen){
+						$cmd .= " --neighbor $neighbor_tlen";
+					}
+					if($chrinfo && -e $chrinfo){
+						$cmd .= " -c $chrinfo";
+					}
+					if($outplot){
+						$cmd .= " --plot";
+					}
+					if($skip_orfsearch){
+						$cmd .= " --wo_orfsearch";
+					}
+					if($cpu_gth != $cpu){
+						$cmd .= " --xthread $cpu_gth";
+					}
+				}
+				else{
+					print "! skip round [$i] because psl alignment is absent (no problem)\n";
+					next;
+				}
+				print "! cmd=[$cmd]\n";
+				system($cmd);
+			}
+			else{
+				print "! skip round [$i] because [$tmplist] is absent...\n";
+			}
+			
+			if($stop_after_psl){
+				print "\n! --9 is invoked, stop pipeline at round_0 (skip remaining)...\n";
+				goto END;
+			}
+		}
+		elsif($i > 0){
+			print "! round [$i] : range=[$initspan] bp, focused scanning...\n";
+			my $hprev = {};
+			if($prev_tsv && -e $prev_tsv){
+				print "! found previous result [$prev_tsv]\n";
+				$hprev = CollectPrevJudge_v3($prev_tsv, $hprev, $i, 0, $dbgff, $hbinpath, $dbpref, $dbfasta, "prev");
+			}
+			for(my $j = 0; $j < $i; $j++){
+				my $prevdir = "round_$j";
+				my $rfile_prev = "./round_$j/summary_genome2sv_".$prevdir."_".$qpref.".tsv";
+				if(-e $rfile_prev){
+					$hprev = CollectPrevJudge_v3($rfile_prev, $hprev, $i, $j, $dbgff, $hbinpath, $dbpref, $dbfasta, "current");
+				}
+			}
+			$tmplist = "list_absentJudge_$i.csv";
+			my $cnt_absent = Search_absentJudge($hprev, $genelist, $tmplist);
+			
+			my $neighbor_tlen_tmp = $neighbor_tlen;
+			if($hinitspan->{$i} < $neighbor_tlen){
+				$neighbor_tlen_tmp = $hinitspan->{$i};
+			}
+			
+			if(-e $tmplist && $cnt_absent > 0){
+				my $cmd = "$bin_asm2sv -d $dbfasta -g $dbgff -l $tmplist -q $qfasta --cpu $cpu --span $initspan -o $subdir";
+				if($neighbor_tlen_tmp){
+					$cmd .= " --neighbor $neighbor_tlen_tmp";
+				}
+				if($skip_orfsearch){
+					$cmd .= " --wo_orfsearch";
+				}
+				if($cpu_gth != $cpu){
+					$cmd .= " --xthread $cpu_gth";
+				}
+				if($host eq 'cluster1'){
+					$cmd .= " --1";
+				}
+				print "! cmd=[$cmd]\n";
+				system($cmd);
+			}
+		}
+	}
+	
+	print "\n! collecting results...\n";
+	my $hcollect = {};
+	if($prev_tsv && -e $prev_tsv){
+		print "! found previous result [$prev_tsv]\n";
+		$hcollect = CollectPrevResult($prev_tsv);
+	}
+	for(my $j = 0; $j < $ntry; $j++){
+		if($hinitspan->{$j} < $neighbor_tlen){			# skip $hinitspan->{$i}=1000 if -n 5000
+			print "! skip round [$j] as $hinitspan->{$j} < $neighbor_tlen\n";
+			next;
+		}
+		
+		my $prevdir = "round_$j";
+		my $rfile_prev = "./round_$j/summary_genome2sv_".$prevdir."_".$qpref.".tsv";
+		my $rfile_orf = "./round_$j/predicted_".$qpref.".fasta";
+		if(-e $rfile_prev){
+			print " [$j] | $hinitspan->{$j} >= $neighbor_tlen : $rfile_prev\n";
+			$hcollect = CollectResult($rfile_prev, $hcollect, $hinitspan->{$j}, $j, $rfile_orf, $qpref);
+		}
+	}
+
+	my $hdbgff = Open_gff2($dbgff);
+	my $g2tdb = $hdbgff->{g2t};
+
+	my $rfile_old = "rev_summary_genome2sv_".$qpref.".tsv";
+	if(-e $rfile_old){
+		system("rm $rfile_old");
+	}
+	my $rfile_final = "rev_summary_genome2sv_".$qpref.".tsv";
+	my $rorf_final = "selected_predict_orf_".$qpref.".fasta";
+	my $log_final = "final_log_stats_".$qpref.".tsv";
+	Summarize_result($hcollect, $genelist, $dbpref, $qpref, $g2tdb, $rfile_final, $log_final, $neighbor_tlen, $skip_orfsearch, $rorf_final);
+}
+elsif($ARGV[0] eq 'makecmd'){
+	#---------------------------------------------------------//
+	my $datalist;
+	my $outplot;
+	my $neighbor_tlen;
+	my $cpu;
+	my $cpu_gth;
+	my $skip_orfsearch;
+	my $cluster;
+	my $stop_after_psl;
+	my $help;
+
+	GetOptions('--input=s' => \$datalist, '--neighbor=i' => \$neighbor_tlen, '--thread=i' => \$cpu, '--xthread=i' => \$cpu_gth, '--plot=s' => \$outplot, '--cluster' => \$cluster, '--9' => \$stop_after_psl, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
+
+	print "\n";
+	if(! $datalist || ! -e $datalist){
+		print "! missing datalist csv\n";
+		$status = "missing";
+	}
+	if($status eq 'missing'){
+		Help(3, $ARGV[0]);
+		goto END;
+	}
+	
+	unless($neighbor_tlen){
+		$neighbor_tlen = 5000;
+	}
+	elsif($neighbor_tlen =~ /\D/){
+		$neighbor_tlen = 5000;
+	}
+	elsif($neighbor_tlen < 1000){
+		$neighbor_tlen = 5000;
+	}
+	elsif($neighbor_tlen > 10000){
+		$neighbor_tlen = 10000;
+	}
+	
+	unless($cpu){
+		$cpu = 16;
+	}
+	elsif($cpu =~ /\D/){
+		$cpu = 16;
+	}
+	elsif($cpu < 0){
+		$cpu = 16;
+	}
+	elsif($cpu > 128){
+		$cpu = 128;
+	}
+	unless($cpu_gth){
+		$cpu_gth = $cpu;
+	}
+	elsif($cpu_gth > $cpu){
+		$cpu_gth = $cpu;
+	}
+	elsif($cpu_gth < 0){
+		$cpu_gth = 1;
+	}
+	
+	my $AoData = Read_datalist($datalist, $ARGV[0]);
+	my $cmds = "";
+	foreach my $hfile (@{$AoData}){
+		$cmds .= "$script_path/Asm2sv run -d $hfile->{dbfasta} -g $hfile->{dbgff} -l $hfile->{genelist} -q $hfile->{qfasta} -t $cpu --neighbor $neighbor_tlen";
+		
+		if($hfile->{qpsl} && $hfile->{qpsl} ne 'null' && -e $hfile->{qpsl}){
+			$cmds .= " -a $hfile->{qpsl}";
+			
+			if($stop_after_psl){
+				$cmds .= " --9";
+			}
+		}
+#		if($hfile->{chralias} && $hfile->{chralias} ne 'null' && -e $hfile->{chralias}){
+#			$cmds .= " -c $hfile->{chralias}";
+#		}
+		if($hfile->{outdir} && $hfile->{outdir} ne 'null'){
+			$cmds .= " -o $hfile->{outdir}";
+		}
+		if($outplot){
+			$cmds .= " --plot";
+		}
+		if($skip_orfsearch){
+			$cmds .= " --wo_orfsearch";
+		}
+		if($cpu_gth != $cpu){
+			$cmds .= " -x $cpu_gth";
+		}
+		if($cluster){
+			$cmds .= " --1";
+		}
+		if($hfile->{prev_result} && $hfile->{prev_result} ne 'null' && -e $hfile->{prev_result}){
+			$cmds .= " --prev $hfile->{prev_result}";
+		}
+		$cmds .= "\n";
+	}
+	my $cmdfile = "cmd_asm2sv_".$datalist;
+	$cmdfile =~ s/\.csv/\.sh/;
+	SAVE($cmdfile, $cmds);
+	print "! output commands [$cmdfile]\n";
+}
+elsif($ARGV[0] eq 'unite'){
+	#---------------------------------------------------------//
+	my $datalist;
+	my $chrinfo;
+	my $outplot;
+	my $neighbor_tlen;
+	my $zip;
+	my $help;
+
+	GetOptions('--input=s' => \$datalist, '--chralias=s' => \$chrinfo, '--zip' => \$zip, '--help' => \$help);
+
+	print "\n";
+	if(! $datalist || ! -e $datalist){
+		print "! missing datalist csv\n";
+		$status = "missing";
+	}
+	if(! $chrinfo || ! -e $chrinfo){
+		print "! --chralias is not specified or missing (will not use chromosome seq ID alias info)...\n";
+		Help(4, $ARGV[0]);
+		goto END;
+	}
+	if($status eq 'missing'){
+		Help(4, $ARGV[0]);
+		goto END;
+	}
+	
+	my $AoData = Read_datalist($datalist, $ARGV[0]);
+	my @SVs;
+	my @Qorf;
+	my $refgenome = "null";
+	foreach my $hfile (@{$AoData}){
+		if(-e $hfile->{svresult}){
+			push(@SVs, $hfile->{svresult});
+			push(@Qorf, $hfile->{predictorf});
+			
+			if($hfile->{refgenome}){
+				$refgenome = $hfile->{refgenome};
+			}
+		}
+	}
+	if(@SVs){
+		my $cmd = "$bin_unitesummary ".join(",", @SVs)." $refgenome $chrinfo ".join(",", @Qorf);
+#		print "\n! cmd=[$cmd]\n";
+		print "\nPress ENTER to proceed: ";
+		my $enter = <STDIN>;
+		if($zip){
+			$cmd .= " zip";
+		}
+		system($cmd);
+	}
+	else{
+		print "! no SV result found...\n";
+	}
+}
+elsif($ARGV[0] eq 'plot'){
+	#---------------------------------------------------------//
+	my $dir;
+	my $dbfasta;
+	my $dbgff;
+	my $falist;
+	my $qgene_list;
+	my $outplot;
+	my $flanking_alen;
+	my $neighbor_tlen;
+	my $cpu;
+	my $help;
+	my $test;
+
+	GetOptions('--db=s' => \$dbfasta, '--gff=s' => \$dbgff, '--qlist=s' => \$falist, '--idlist=s' => \$qgene_list, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--flen=s' => \$flanking_alen, '--cpu=i' => \$cpu, '--test' => \$test, '--help' => \$help);
+
+	print "\n";
+	if(! $dbfasta || ! -e $dbfasta){
+		print "! missing db fasta input\n";
+		$status = "missing";
+	}
+	if(! $dbgff || ! -e $dbgff){
+		print "! missing db gff input\n";
+		$status = "missing";
+	}
+	if(! $falist || ! -e $falist){
+		print "! missing fasta list\n";
+		$status = "missing";
+	}
+	if(! $qgene_list || ! -e $qgene_list){
+		print "! missing gene ID list\n";
+		$status = "missing";
+	}
+	unless($flanking_alen){
+		$flanking_alen = "100000,50000,20000,5000";
+		print "! --flen will be [$flanking_alen]\n";
+#		print "! missing flanking seq length, --flen\n";
+#		$status = "missing";
+	}
+	if($status eq 'missing'){
+		Help(5, $ARGV[0]);
+		goto END;
+	}
+	
+	unless($neighbor_tlen){
+		$neighbor_tlen = 5000;
+	}
+	elsif($neighbor_tlen =~ /\D/){
+		$neighbor_tlen = 5000;
+	}
+	elsif($neighbor_tlen < 0){
+		$neighbor_tlen = 5000;
+	}
+	elsif($neighbor_tlen > 10000){
+		$neighbor_tlen = 10000;
+	}
+	
+	unless($cpu){
+		$cpu = 16;
+	}
+	elsif($cpu =~ /\D/){
+		$cpu = 16;
+	}
+	elsif($cpu > 128){
+		$cpu = 128;
+	}
+	unless($test){
+		$test = 0;
+	}
+	
+	my @FLS = split(/,/, $flanking_alen);
+	my @FLS2;
+	foreach my $initspan (@FLS){
+		unless($initspan){
+			$initspan = 50000;
+		}
+		elsif($initspan =~ /\D/){
+			$initspan = 50000;
+		}
+		elsif($initspan < 1000){
+			$initspan = 1000;
+		}
+		elsif($initspan > 1000000){
+			$initspan = 1000000;
+		}
+		push(@FLS2, $initspan);
+	}
+	$flanking_alen = join(",", @FLS2);
+	
+	my $log;
+	$log .= "! reference fasta           : [$dbfasta]\n";
+	$log .= "! reference gff             : [$dbgff]\n";
+	$log .= "! query fasta list          : [$falist]\n";
+	$log .= "! target gene ID list       : [$qgene_list]\n";
+	$log .= "! flanking alignment length : [$flanking_alen] bp (for plot)\n";
+	$log .= "! neighbor seq target       : [$neighbor_tlen] bp (e.g. promoter region)\n";
+
+	print $log,"\n";
+
+	my @APP;
+	push(@APP, "samtools");
+	push(@APP, "gffread");
+	push(@APP, "gth");
+	push(@APP, "blat");
+	push(@APP, "blat2hints");
+	push(@APP, "matcher");
+	push(@APP, "lastdb");
+	push(@APP, "lastal");
+	push(@APP, "makeblastdb");
+	push(@APP, "blastn");
+
+	my $hbin = {};
+	foreach my $app (@APP){
+		$hbin->{$app}[0] = $app;
+	}
+	my $hpath = {};
+	my $hbinpath = Search_app2($hbin, \@APP, $hpath, $script_path, "");
+	if($hbinpath->{err}){
+		print "! abort script due to missing program(s)..., please confirm program is in PATH.\n";
+		goto END;
+	}
+
+	#---------------------------------------------------------------//
+	print "\n";
+	my $dbpref = $dbfasta;
+	if($dbpref =~ /\.fasta/){
+		$dbpref =~ s/\.fasta//g;
+	}
+	elsif($dbpref =~ /\.fa/){
+		$dbpref =~ s/\.fa//g;
+	}
+	
+	my $fapref = $falist;
+	$fapref =~ s/\.txt//;
+	$fapref =~ s/\.csv//;
+	
+	unless($dir){
+		$dir = "plot_asm2sv_".$dbpref."_vs_".$fapref;
+	}
+	unless(-e $dir){
+		system("mkdir $dir");
+	}
+	chdir $dir;
+	
+	$dbfasta = CpFile($dbfasta);
+	$dbgff = CpFile($dbgff);
+	$falist = CpFile($falist);
+	$qgene_list = CpFile($qgene_list);
+	
+	my $hqgene = Read_qgenelist($qgene_list, $dbgff);
+	my @GID = keys(%{$hqgene});
+	@GID = sort {$a cmp $b} @GID;
+	
+	my ($hqfasta, $fstatus) = Open_falist($falist, $wpath);
+	if($fstatus eq 'missing'){
+		goto END;
+	}
+	
+	my @QFA = keys(%{$hqfasta});
+	@QFA = sort {$a cmp $b} @QFA;
+	
+	unless(-e "cmdlog"){
+		system("mkdir cmdlog");
+	}
+	
+	foreach my $initspan (@FLS2){
+		print "\n#############################################################\n";
+		print "! flanking seq length=[$initspan]\n";
+		
+		foreach my $qfasta (@QFA){
+			my $num_qgene = @GID;
+			my $d = int($num_qgene / $cpu) + 1;
+			
+			my $each_cpu = int($cpu / $num_qgene);
+			if($each_cpu == 0){
+				$each_cpu = 1;
+			}
+			
+			my $qpsl = "null";
+#			if($hqfasta->{$qfasta}{psl} && -e $hqfasta->{$qfasta}{psl} && $hqfasta->{$qfasta}{psl} =~ /\.psl/){
+#				$qpsl = $hqfasta->{$qfasta}{psl};
+#			}
+			
+			print "! start analysis for [$qfasta] | [$num_qgene x $each_cpu] threads\n";
+			for(my $i = 0; $i < $d; $i++){
+				my $p0 = $i * $cpu;
+				my $p1 = ($i + 1) * $cpu;
+				
+				my $thrs = [];
+				for(my $j = $p0; $j < $p1; $j++){
+					unless($GID[$j]){
+						next;
+					}
+					
+					my $qgene = $GID[$j];
+					if($hqgene->{$qgene} eq '1'){
+						next;
+					}
+					my $tmplist = "_query_$qgene.csv";
+					SAVE($tmplist, $hqgene->{$qgene});
+					
+					my $subdir = $qgene."_f-".$initspan;
+					if($neighbor_tlen){
+						$subdir .= "_n-$neighbor_tlen";
+					}
+					unless(-e $subdir){
+						system("mkdir $subdir");
+					}
+					
+					my $shfile = "./cmdlog/cmd_$qgene.sh";
+					my $logfile = "./cmdlog/log_$qgene.txt";
+					my $cmd = "$bin_asm2sv -d $dbfasta -g $dbgff -l $tmplist -q $qfasta --cpu $each_cpu --span $initspan --plot -o $subdir";
+#					if($qpsl ne 'null' && -e $qpsl){
+#						$cmd .= " -a $qpsl";
+#					}
+					if($neighbor_tlen){
+						$cmd .= " --neighbor $neighbor_tlen";
+					}
+					SAVE($shfile, $cmd);
+					
+					my $thr = threads->new(\&Batch_plot, $shfile, $j, $qgene, $tmplist, $logfile, $each_cpu);
+					push(@{$thrs}, $thr);
+				}
+				foreach my $thr (@{$thrs}){
+					$thr->join();
+				}
+			}
+			print "! all done.\n\n";
+		}
+	}
+}
+elsif($ARGV[0] eq 'gfftolist'){
+	#---------------------------------------------------------//
+	my $dbgff;
+	my $help;
+
+	GetOptions('--gff=s' => \$dbgff, '--help' => \$help);
+
+	print "\n";
+	if(! $dbgff || ! $dbgff =~ /\.gff/i || ! -e $dbgff){
+		print "! missing db gff. Gff file must have '.gff' extention. \n";
+		$status = "missing";
+	}
+	if($status eq 'missing'){
+		Help(6, $ARGV[0]);
+		goto END;
+	}
+	
+	my $rcsv = $dbgff;
+	my @Chars = split(//, $dbgff);
+	if($rcsv =~ /\//){
+		my @tmp = split(/\//, $rcsv);
+		my $ntmp = @tmp;
+		my @tmpD;
+		for(my $i = 0; $i < $ntmp - 1; $i++){
+			push(@tmpD, $tmp[$i]);
+		}
+		$tmp[$ntmp - 1] =~ s/\.gff3//;
+		$tmp[$ntmp - 1] =~ s/\.gff//;
+		
+		if($Chars[0] eq '.'){
+			$rcsv = join("\/", @tmpD)."/summary_gene_".$tmp[$ntmp - 1].".csv";
+		}
+		elsif($Chars[0] eq '/'){
+			$rcsv = "/".join("\/", @tmpD)."/summary_gene_".$tmp[$ntmp - 1].".csv";
+		}
+		else{
+			$dbgff = "./".$dbgff;
+			$rcsv = "./".join("\/", @tmpD)."/summary_gene_".$tmp[$ntmp - 1].".csv";
+		}
+	}
+	else{
+		$rcsv =~ s/\.gff3//;
+		$rcsv =~ s/\.gff//;
+		$rcsv = "summary_gene_".$rcsv.".csv";
+	}
+	
+	my $cmd = "$bin_gfftolist $dbgff $rcsv";
+	print "! cmd=[$cmd]\n";
+	print "\nPress ENTER to proceed: ";
+	my $enter = <STDIN>;
+	system($cmd);
+}
+
+END:{
+	print "\n! End of script.\n\n";
+}
+
+
+################################################################################
+#-------------------------------------------------------------------------------
+sub Help{
+my $mode = shift;
+my $option = shift;
+
+my $help_command;
+if(! $mode || $mode eq '1'){
+	$help_command =<<"EOS";
+
+Basic usage: 
+  /path/to/Asm2sv run or check or makecmd or gfftolist or unite or plot
+EOS
+}
+elsif($mode eq '2'){
+	$help_command =<<"EOS";
+
+Basic usage: 
+  /path/to/Asm2sv $option -d [reference fasta] -g [reference gff3] -l [gene list] -q [query fasta] -a [alignment psl] -c [chr alias info] -o [directory] --thread [CPU thread] --neighbor [neighbor seq span]
+
+--db or -d            : reference sequence (fasta, required)
+--gff or -g           : reference gff (gff, required)
+--list or -l          : list of gene to be analyzed (csv or txt, required)
+--query or -q         : query fasta (fasta, required)
+--alignpsl or -a      : LAST alignment (psl, required)
+--chralias or -c      : chromosome ID alias info (tsv, required)
+--neighbor or -n      : include [X] bp neighboring seq to analyze SV in addition to target (e.g. promoter)
+--wo_orfsearch or -w  : without ORF prediction
+--plot                : outplot alignment dotplots focused on the region of each gene (a large number of png will be generated)
+--thread or -t        : CPU thread number (default 16)
+--output_dir or -o    : output directory
+--help or -h          : display usage
+EOS
+}
+elsif($mode eq '3'){
+	$help_command =<<"EOS";
+
+Basic usage: 
+  /path/to/Asm2sv $option -i [datalist csv] --thread [CPU thread] --neighbor [neighbor seq span]
+
+--input or -i         : data file list (PATH of fasta, GFF, psl, and other files)
+                       *header should be "dbfasta" "dbgff" "genelist" "qfasta" "qpsl" "chralias"
+                       
+--neighbor or -n      : include [X] bp neighboring seq to analyze SV in addition to target (e.g. promoter)
+--thread or -t        : CPU thread number (default 16)
+--cluster             : use cluster pc
+--help or -h          : display usage
+EOS
+}
+elsif($mode eq '4'){
+	$help_command =<<"EOS";
+
+Basic usage: 
+  /path/to/Asm2sv $option -i [datalist csv] -c [chr alias info]
+
+--input or -i         : data file list (PATH of fasta, GFF, psl, and other files)
+                       *header should be "dbfasta" "dbgff" "genelist" "qfasta" "qpsl" "chralias"
+                       
+--chralias or -c      : chromosome ID alias info (tsv, required)
+--help or -h          : display usage
+EOS
+}
+elsif($mode eq '5'){
+	$help_command =<<"EOS";
+
+Basic usage: 
+  /path/to/Asm2sv $option -d [reference fasta] -g [reference gff3] -q [fasta list] -i [gene ID list] -o [directory] --cpu [CPU thread] --flen [flanking seq span] --neighbor [neighbor seq span]
+
+--db or -d            : reference sequence (fasta, required)
+--gff or -g           : reference gff (gff, required)
+--qlist or -q         : list of genomic fasta file (csv or txt, required)
+--id or -i            : query gene ID list (txt, required)
+--flen or -f          : length of flanking seq for alignment plot (e.g. 50000,20000,1000)
+--neighbor or -n      : include [X] bp neighboring seq to analyze SV in addition to target (e.g. promoter)
+--cpu or -c           : CPU thread number (default 4)
+--output_dir or -o    : output directory
+--help or -h          : display usage
+EOS
+}
+elsif($mode eq '6'){
+	$help_command =<<"EOS";
+
+Basic usage: 
+  /path/to/Asm2sv $option -g [reference gff3]
+
+--gff or -g           : reference gff (gff, required)
+--help or -h          : display usage
+EOS
+}
+
+print $help_command;
+
+}
+
+
+#-------------------------------------------------------------------------------
+sub CheckORFsearch_prevresult{
+my $file = shift;
+
+open(my $fh, "<", $file);
+my $judge = "false";
+my $cnt = 0;
+my $cnt_na = 0;
+my $cnt_pr = 0;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	if($cnt > 0){
+		my @A = split(/\t/, $line);
+		my $numA = @A;
+		if(! $A[34]){
+			$judge = "false";
+			last;
+		}
+		elsif($A[34] eq '-' || $A[34] eq 'null'){
+			$cnt_na++;
+		}
+		elsif($A[34] =~ /[0-9]/){
+			$cnt_pr++;
+		}
+	}
+	$cnt++;
+}
+close $fh;
+
+#if($cnt_pr > int($cnt / 4) ){
+if($cnt_pr > 0){
+	$judge = "true";
+}
+
+return $judge;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Read_datalist{
+my $file = shift;
+my $option = shift;
+
+print "! reading data list [$file]...\n";
+open(my $fh, "<", $file);
+my $AoA = [];
+my @H;
+my $cnt = 0;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	if(! $line || $line =~ /\#/){
+		next;
+	}
+	else{
+		my @A = split(/,/, $line);
+		my $numA = @A;
+		
+		if($line =~ /dbfasta/ && $line =~ /qfasta/){
+#			dbfasta	dbgff	genelist	qfasta	qpsl	chralias	thread
+			
+			for(my $i = 0; $i < $numA; $i++){
+				push(@H, $A[$i]);
+			}
+			next;
+		}
+		else{
+			$cnt++;
+			my $missing = 0;
+			for(my $i = 0; $i < $numA; $i++){
+				if($H[$i] eq 'qpsl' || $H[$i] eq 'chralias' || $H[$i] eq 'prev_result'){
+					if(! $A[$i] || ! -e $A[$i]){
+						$A[$i] = "null";
+					}
+				}
+				elsif($H[$i] eq 'outdir'){
+					if(! $A[$i]){
+						$A[$i] = "null";
+					}
+				}
+				else{
+					if(! -e $A[$i]){
+						print " [$cnt] : missing [$A[$i]]\n";
+						$missing++;
+					}
+				}
+			}
+			if($missing == 0){
+				my $hash = {};
+				for(my $i = 0; $i < $numA; $i++){
+					$hash->{$H[$i]} = $A[$i];
+				}
+				
+				my @tmp0 = split(/\//, $hash->{dbfasta});
+				my $ntmp0 = @tmp0;
+				my $dbpref = $tmp0[$ntmp0 - 1];
+				$dbpref =~ s/\.fasta//;
+				$dbpref =~ s/\.fa//;
+				$hash->{dbpref} = $dbpref;
+				
+				my @tmp1 = split(/\//, $hash->{qfasta});
+				my $ntmp1 = @tmp1;
+				my $qpref = $tmp1[$ntmp1 - 1];
+				$qpref =~ s/\.fasta//;
+				$qpref =~ s/\.fa//;
+				$hash->{qpref} = $qpref;
+				
+				my $expected_psl_name = "lastal_q-".$qpref."_DB-".$dbpref.".psl";
+				if(! $hash->{outdir}){
+					$hash->{outdir} = "result_asm2sv_".$dbpref."_vs_".$qpref;
+				}
+				my $expected_svresult = "./$hash->{outdir}/rev_summary_genome2sv_".$qpref.".tsv";
+				my $expected_prefictorf = "./$hash->{outdir}/selected_predict_orf_".$qpref.".fasta";
+				
+				if($option eq 'makecmd'){
+					if($hash->{qpsl} && $hash->{qpsl} ne 'null' && -e $hash->{qpsl}){
+						if($hash->{qpsl} !~ /$expected_psl_name/){
+							print "! error : expected psl file name [$expected_psl_name] does not match specified file [$hash->{qpsl}]\n";
+							#print "! psl files shoud be prepared with \'galign\' option.\n";
+							print "! abort script...\n\n";
+							die;
+						}
+						else{
+							print " [$cnt] : db=[$hash->{dbfasta}] q=[$hash->{qfasta}] psl=[$hash->{qpsl}] <OK>\n";
+							push(@{$AoA}, $hash);
+						}
+					}
+					elsif($hash->{qpsl} && $hash->{qpsl} ne 'null' && ! -e $hash->{qpsl}){
+						print " [$cnt] : db=[$hash->{dbfasta}] q=[$hash->{qfasta}] | psl=[$hash->{qpsl}] <not found> skip...\n";
+					}
+					else{
+						print " [$cnt] : db=[$hash->{dbfasta}] q=[$hash->{qfasta}] <OK>\n";
+						push(@{$AoA}, $hash);
+					}
+				}
+				elsif($option eq 'unite'){
+					if(-e $expected_svresult){
+						if($dbpref eq $qpref){
+							print " [$cnt] : sv result=[$expected_svresult] <OK> *reference\n";
+							$hash->{refgenome} = $dbpref;
+						}
+						else{
+							print " [$cnt] : sv result=[$expected_svresult] <OK>\n";
+						}
+						$hash->{svresult} = $expected_svresult;
+						$hash->{predictorf} = $expected_prefictorf;
+						push(@{$AoA}, $hash);
+					}
+				}
+			}
+		}
+	}
+}
+close $fh;
+
+print "! total [$cnt] samples\n";
+
+return $AoA;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Batch_plot{
+my $shfile = shift;
+my $t = shift;
+my $qgene = shift;
+my $tmplist = shift;
+my $logfile = shift;
+my $each_cpu = shift;
+
+print " thread [$t] : [$qgene] --cpu $each_cpu\n";
+if(system("bash $shfile >> $logfile 2>&1") != 0){
+	print "! thread [$t] : failed\n";
+}
+#else{
+#	print "! thread [$t] : finished\n";
+#}
+if(-e $tmplist){
+	system("rm $tmplist");
+}
+
+}
+
+
+#-------------------------------------------------------------------------------
+sub Summarize_result{
+my $hash = shift;
+my $genelist = shift;
+my $dbpref = shift;
+my $qpref = shift;
+my $g2tdb = shift;
+my $rfile_final = shift;
+my $log_final = shift;
+my $neighbor_tlen = shift;
+my $skip_orfsearch = shift;
+my $rorf_final = shift;
+
+my $hentry = {};
+my $log_stat = "";
+if(-e $genelist){
+	print "\n! reading entry list [$genelist]...\n";
+	open(my $fh, "<", $genelist);
+	my $cnt = 0;
+	my $cnt_present1 = 0;
+	my $cnt_present2 = 0;
+	my $cnt_present3 = 0;
+	my $cnt_absent1 = 0;
+	my $cnt_absent2 = 0;
+	while(my $line = <$fh>){
+		$line =~ s/\n//;
+		$line =~ s/\r//;
+		
+		unless($line){
+			next;
+		}
+		
+		my @A = split(/,/, $line);
+		unless($g2tdb->{$A[0]}){
+			next;
+		}
+		$hentry->{$A[0]} = 1;
+		
+		if(! $hash->{$A[0]}{P} && ! $hash->{$A[0]}{P0} && ! $hash->{$A[0]}{P1} && ! $hash->{$A[0]}{P2} && ! $hash->{$A[0]}{P3} && ! $hash->{$A[0]}{A}){
+#			print "$line\n";
+			$hash->{$A[0]}{A} = "$qpref\t$dbpref\t$A[1]\t-\t-\t$A[2]\t$A[3]\t$qpref\tno hit or not target\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t$A[0]\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-";
+			$hash->{$A[0]}{i} = "-";
+			$cnt_absent1++;
+		}
+		elsif($hash->{$A[0]}{P}){
+			$cnt_present1++;
+		}
+		elsif($hash->{$A[0]}{P0}){
+			$cnt_present2++;
+		}
+		elsif($hash->{$A[0]}{P1}){
+			$cnt_present3++;
+		}
+		elsif($hash->{$A[0]}{P2}){
+			$cnt_present2++;
+		}
+		elsif($hash->{$A[0]}{P3}){
+			$cnt_present3++;
+		}
+		elsif($hash->{$A[0]}{A}){
+			$cnt_absent2++;
+		}
+		$cnt++;
+	}
+	close $fh;
+	
+	if($skip_orfsearch){
+		print "! total [$cnt] entries\n";
+		print " - [$cnt_present1] = confirmed alignment\n";
+#		print " - [$cnt_present2] = confirmed alignment but missing ORF\n";
+		print " - [$cnt_present3] = confirmed alignment partly\n";
+		print " - [$cnt_absent2] = missing alignment\n";
+		print " - [$cnt_absent1] = missing entry\n";
+		
+		$log_stat .= "gene_list\t$genelist\n";
+		$log_stat .= "confirmed alignment\t$cnt_present1\n";
+#		$log_stat .= "confirmed alignment but missing ORF\t$cnt_present2\n";
+		$log_stat .= "confirmed alignment partly\t$cnt_present3\n";
+		$log_stat .= "missing alignment\t$cnt_absent2\n";
+		$log_stat .= "missing entry\t$cnt_absent1\n";
+	}
+	else{
+		print "! total [$cnt] entries\n";
+		print " - [$cnt_present1] = confirmed both alignment and ORF\n";
+		print " - [$cnt_present2] = confirmed alignment but missing ORF\n";
+		print " - [$cnt_present3] = confirmed alignment partly\n";
+		print " - [$cnt_absent2] = missing alignment\n";
+		print " - [$cnt_absent1] = missing entry\n";
+		
+		$log_stat .= "gene_list\t$genelist\n";
+		$log_stat .= "confirmed both alignment and ORF\t$cnt_present1\n";
+		$log_stat .= "confirmed alignment but missing ORF\t$cnt_present2\n";
+		$log_stat .= "confirmed alignment partly\t$cnt_present3\n";
+		$log_stat .= "missing alignment\t$cnt_absent2\n";
+		$log_stat .= "missing entry\t$cnt_absent1\n";
+	}
+}
+
+my @GID = keys(%{$hash});
+my $AoA = [];
+my $orf_fasta = "";
+foreach my $gid (@GID){
+	if(! $hentry->{$gid}){
+		next;
+	}
+	
+	my @A;
+	if($hash->{$gid}{P}){
+		@A = split(/\t/, $hash->{$gid}{P});
+#		$hash->{$gid}{i} .= " P";
+		push(@A, $hash->{$gid}{i});
+	}
+	elsif($hash->{$gid}{P0}){
+		@A = split(/\t/, $hash->{$gid}{P0});
+#		$hash->{$gid}{i} .= " P0";
+		push(@A, $hash->{$gid}{i});
+		$A[22] .= " but missing ORF";
+	}
+	elsif($hash->{$gid}{P1}){
+		@A = split(/\t/, $hash->{$gid}{P1});
+#		$hash->{$gid}{i} .= " P1";
+		push(@A, $hash->{$gid}{i});
+	}
+	elsif($hash->{$gid}{P2}){
+		@A = split(/\t/, $hash->{$gid}{P2});
+#		$hash->{$gid}{i} .= " P2";
+		push(@A, $hash->{$gid}{i});
+		$A[22] .= " but missing ORF";
+	}
+	elsif($hash->{$gid}{P3}){
+		@A = split(/\t/, $hash->{$gid}{P3});
+#		$hash->{$gid}{i} .= " P3";
+		push(@A, $hash->{$gid}{i});
+	}
+	elsif($hash->{$gid}{A}){
+		@A = split(/\t/, $hash->{$gid}{A});
+		push(@A, $hash->{$gid}{i});
+	}
+	push(@{$AoA}, \@A);
+	
+	if($hash->{$gid}{orf}){
+		$orf_fasta .= $hash->{$gid}{orf};
+	}
+#	else{
+#		print "! missing orf for [$gid]...\n";
+#		sleep(1);
+#	}
+}
+
+@{$AoA} = sort {$a->[5] <=> $b->[5]} @{$AoA};
+@{$AoA} = sort {$a->[2] cmp $b->[2]} @{$AoA};
+
+my $header_summary = "directory\tdbfasta\tseqid\tpos0\tpos1\tsp0\tsp1\tqfasta\tqfasta seqid\thit pos0\thit pos1\tgroup\thit sp0\thit sp1\tbp (sp0-sp1)\tbp hit-align (sp0-sp1)\tbp hit-span (sp0-sp1)\tbp hit-span woN (sp0-sp1)\tbp insertion\talign ratio (1=not disrupted)\tinsert ratio (1=not disrupted)\tseq normality (1=not disrupted)\tjudge\tgene_id\t";
+$header_summary .= "5'-promoter bp hit ($neighbor_tlen bp)\t5'-promoter align ratio ($neighbor_tlen bp)\t3'-UTR bp hit ($neighbor_tlen bp)\t3'-UTR align ratio ($neighbor_tlen bp)\t";
+$header_summary .= "5' flanking bp hit\t5' flanking align ratio\t3' flanking bp hit\t3' flanking align ratio\t";
+$header_summary .= "protein coding\tdb protein length\tq protein length (predicted)\talign length\t\%similarity\t\%gap\tscore\tflanking seq length for initial search\n";
+
+my $r = $header_summary;
+
+my $cnthit_with_neighbor = 0;
+my $cnthit_wo_neighbor = 0;
+foreach my $A (@{$AoA}){
+	if($A->[2] !~ /scaffold/i){
+		if($A->[39] && $A->[39] ne '-' && $A->[3] ne '-' && $A->[5] ne '-' && $A->[3] =~ /\d/ && $A->[5] =~ /\d/){
+			if($A->[39] < 5000){
+				$A->[22] .= " (may be complex or translocation)";
+				$cnthit_wo_neighbor++;
+			}
+			else{
+				$cnthit_with_neighbor++;
+			}
+		}
+		$r .= join("\t", @{$A})."\n";
+	}
+}
+foreach my $A (@{$AoA}){
+	if($A->[2] =~ /scaffold/i){
+		if($A->[39] && $A->[39] ne '-' && $A->[3] ne '-' && $A->[5] ne '-' && $A->[3] =~ /\d/ && $A->[5] =~ /\d/){
+			if($A->[39] < 5000){
+				$A->[22] .= " (may be complex or translocation)";
+				$cnthit_wo_neighbor++;
+			}
+			else{
+				$cnthit_with_neighbor++;
+			}
+		}
+		$r .= join("\t", @{$A})."\n";
+	}
+}
+
+print "\n! stats for the neighboring flanking seq alignment\n";
+print "! [$cnthit_with_neighbor] with 20-5 kb (probably within synteny)\n";
+print "! [$cnthit_wo_neighbor] with 1 kb (may be translocated)\n\n";
+
+$log_stat .= "\nalignment comfirmed for the neighboring flanking seq\n";
+$log_stat .= "20-5 kb\t$cnthit_with_neighbor\t*within synteny\n";
+$log_stat .= "1 kb\t$cnthit_wo_neighbor\t*may be translocated\n";
+
+if($r){
+	open(my $rfh, ">", $rfile_final);
+	print $rfh $r;
+	close $rfh;
+	print "! output [$rfile_final]\n";
+}
+if($orf_fasta){
+	open(my $rfh, ">", $rorf_final);
+	print $rfh $orf_fasta;
+	close $rfh;
+	print "! output [$rorf_final]\n";
+}
+if($log_stat){
+	open(my $rfh, ">", $log_final);
+	print $rfh $log_stat;
+	close $rfh;
+	print "! output [$log_final]\n";
+}
+
+}
+
+
+#-------------------------------------------------------------------------------
+sub CollectPrevResult{
+my $file = shift;
+
+my $hash = {};
+if(-e $file){
+	open(my $fh, "<", $file);
+	my $cnt = 0;
+	while(my $line = <$fh>){
+		$line =~ s/\n//;
+		$line =~ s/\r//;
+		
+		unless($line){
+			next;
+		}
+		elsif($line =~ /directory/ && $line =~ /dbfasta/){
+			next;
+		}
+		
+		my @A = split(/\t/, $line);
+		my $numA = @A;
+		if($A[22] && $A[22] !~ /missing border/ && ! $hash->{$A[23]}{P} && $numA > 25){
+			if($A[25] eq '0'){
+				$A[25] = "-";
+			}
+			if($A[39] && $A[39] =~ /\d/ && $A[39] !~ /\D/){
+				if($A[22] =~ /present/ || $A[22] =~ /insert/){
+					if($A[39] eq '20000'){
+						if($A[22] !~ /collapse/ && $A[22] !~ /partly/ && $A[22] !~ /insert/){
+							if($A[34] && $A[34] ne '0' && $A[34] ne '.' && $A[34] ne '-'){
+								$hash->{$A[23]}{P} = join("\t", @A);
+								$hash->{$A[23]}{i} = $A[39];
+							}
+							else{
+								$hash->{$A[23]}{P2} = join("\t", @A);
+								$hash->{$A[23]}{i} = $A[39];
+							}
+						}
+	#					elsif($A[22] =~ /insertion/){
+	#						if($A[22] =~ /2kb/ || $A[22] =~ /1kb/ || $A[22] =~ /500bp/){
+	#							$hash->{$A[23]}{P1} = join("\t", @A);
+	#							$hash->{$A[23]}{i} = $initspan;
+	#						}
+	#					}
+	#					else{
+	#						if(! $hash->{$A[23]}{P3}){
+	#							$hash->{$A[23]}{P3} = join("\t", @A);
+	#							$hash->{$A[23]}{i} = $initspan;
+	#						}
+	#					}
+					}
+					else{
+						if($A[22] !~ /collapse/ && $A[22] !~ /partly/ && $A[22] !~ /insert/){
+							if($A[34] && $A[34] ne '0' && $A[34] ne '.' && $A[34] ne '-'){
+								$hash->{$A[23]}{P} = join("\t", @A);
+								$hash->{$A[23]}{i} = $A[39];
+							}
+							else{
+								$hash->{$A[23]}{P0} = join("\t", @A);
+								$hash->{$A[23]}{i} = $A[39];
+							}
+						}
+						else{
+							if(! $hash->{$A[23]}{P1}){
+								$hash->{$A[23]}{P1} = join("\t", @A);
+								$hash->{$A[23]}{i} = $A[39];
+							}
+						}
+					}
+				}
+				elsif($A[22] =~ /absent/){
+					$hash->{$A[23]}{A} = join("\t", @A);
+					$hash->{$A[23]}{i} = $A[39];
+				}
+				else{
+					$hash->{$A[23]}{A} = join("\t", @A);
+					$hash->{$A[23]}{i} = $A[39];
+				}
+			}
+		}
+		$cnt++;
+	}
+	close $fh;
+}
+else{
+	print "! skip [$file]...\n";
+}
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub CollectResult{
+my $file = shift;
+my $hash = shift;
+my $initspan = shift;
+my $j = shift;
+my $orf_fasta = shift;
+my $qpref = shift;
+
+my $horf = {};
+if(-e $orf_fasta){
+#	print " reading [$orf_fasta]...\n";
+	open(my $fh, "<", $orf_fasta);
+	my $ID = "";
+	my $seq = "";
+	my $cnt = 0;
+	my $seg = 1000;
+	my $add = $seg;
+	while(my $line = <$fh>){
+		$line =~ s/\n//;
+		$line =~ s/\r//;
+		
+		if($line =~ /\>/){
+			if($seq){
+				$horf->{$ID}{num} += 1;
+				$horf->{$ID}{fasta} .= ">".$ID."__".$qpref."__p.".$horf->{$ID}{num}."\n".$seq."\n";
+				
+#				if($cnt == $seg){
+#					print " [$cnt]\n";
+#					$seg += $add;
+#				}
+			}
+			
+			my $tmp_qpref = $qpref."_";
+			$line =~ s/$tmp_qpref//;
+			my @tmp = split(/_/, $line);
+			$ID = $tmp[0];
+			$ID =~ s/\>//;
+			$seq = "";
+			$cnt++;
+		}
+		else{
+			$line =~ s/\.//g;
+			if($line){
+				$seq .= $line;
+			}
+		}
+	}
+	close $fh;
+	
+	if($seq){
+		$horf->{$ID}{num} += 1;
+		$horf->{$ID}{fasta} .= ">".$ID."__".$qpref."__p.".$horf->{$ID}{num}."\n".$seq."\n";
+	}
+}
+
+if(-e $file){
+	open(my $fh, "<", $file);
+	my $cnt = 0;
+	while(my $line = <$fh>){
+		$line =~ s/\n//;
+		$line =~ s/\r//;
+		
+		unless($line){
+			next;
+		}
+		elsif($line =~ /directory/ && $line =~ /dbfasta/){
+			next;
+		}
+		
+		my @A = split(/\t/, $line);
+		my $numA = @A;
+		if($A[22] && ! $hash->{$A[23]}{P} && $numA > 25){
+			if($A[25] eq '0'){
+				$A[25] = "-";
+			}
+			if($A[22] =~ /present/ || $A[22] =~ /insert/){
+				if($j == 0){
+					if($A[22] !~ /collapse/ && $A[22] !~ /partly/ && $A[22] !~ /insert/){
+						if($A[34] && $A[34] ne '0' && $A[34] ne '.' && $A[34] ne '-'){
+							$hash->{$A[23]}{P} = join("\t", @A);
+							$hash->{$A[23]}{i} = $initspan;
+							
+							if($horf->{$A[23]}{fasta}){
+								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+							}
+						}
+						else{
+							$hash->{$A[23]}{P2} = join("\t", @A);
+							$hash->{$A[23]}{i} = $initspan;
+							
+							if($horf->{$A[23]}{fasta}){
+								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+							}
+						}
+					}
+#					elsif($A[22] =~ /insertion/){
+#						if($A[22] =~ /2kb/ || $A[22] =~ /1kb/ || $A[22] =~ /500bp/){
+#							$hash->{$A[23]}{P1} = join("\t", @A);
+#							$hash->{$A[23]}{i} = $initspan;
+#						}
+#					}
+#					else{
+#						if(! $hash->{$A[23]}{P3}){
+#							$hash->{$A[23]}{P3} = join("\t", @A);
+#							$hash->{$A[23]}{i} = $initspan;
+#						}
+#					}
+				}
+				else{
+					if($A[22] !~ /collapse/ && $A[22] !~ /partly/ && $A[22] !~ /insert/){
+						if($A[34] && $A[34] ne '0' && $A[34] ne '.' && $A[34] ne '-'){
+							$hash->{$A[23]}{P} = join("\t", @A);
+							$hash->{$A[23]}{i} = $initspan;
+							
+							if($horf->{$A[23]}{fasta}){
+								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+							}
+						}
+						else{
+							$hash->{$A[23]}{P0} = join("\t", @A);
+							$hash->{$A[23]}{i} = $initspan;
+							
+							if($horf->{$A[23]}{fasta}){
+								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+							}
+						}
+					}
+					else{
+						if(! $hash->{$A[23]}{P1}){
+							$hash->{$A[23]}{P1} = join("\t", @A);
+							$hash->{$A[23]}{i} = $initspan;
+							
+							if($horf->{$A[23]}{fasta}){
+								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+							}
+						}
+					}
+				}
+			}
+			elsif($A[22] =~ /absent/){
+				$hash->{$A[23]}{A} = join("\t", @A);
+				$hash->{$A[23]}{i} = $initspan;
+			}
+			else{
+				$hash->{$A[23]}{A} = join("\t", @A);
+				$hash->{$A[23]}{i} = $initspan;
+			}
+		}
+		$cnt++;
+	}
+	close $fh;
+}
+
+return $hash;
+}
+
+
+#------------------------------------------------------------------------
+sub Open_falist{
+my $file = shift;
+my $wpath = shift;
+
+print "\n! reading query fasta list [$file]...\n";
+open(my $fh, "<", $file) or die;
+my $status = "-";
+my $hash = {};
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+
+#	fasta	psl
+#	Gmax_508_v4.0.fasta
+#	Gmax_Enrei_pseudomol_v3.24.fasta
+	
+	if(! $line || $line =~ /\#/){
+		next;
+	}
+	
+	my @A;
+	if($line =~ /,/){
+		@A = split(/,/, $line);
+	}
+	elsif($line =~ /\t/){
+		@A = split(/\t/, $line);
+	}
+	else{
+		@A = split(/\s/, $line);
+	}
+	
+	my $info = "";
+	my $qfasta = "";
+	if($A[0] && $A[0] =~ /\.fa/i){
+		my $fpath = $A[0];
+		my @tmp = split(/\//, $fpath);
+		my $ntmp = @tmp;
+		my $fname = $tmp[$ntmp - 1];
+		
+		if(-e $fpath){
+			$hash->{$fname}{fasta} = $fpath;
+		}
+		else{
+			if($fpath =~ /\.\//){
+				$fpath =~ s/\.\///;
+				$fpath = $wpath."/".$fpath;
+			}
+			else{
+				$fpath = $wpath."/".$fpath;
+			}
+			if(-e $fpath){
+				$hash->{$fname}{fasta} = $fpath;
+			}
+		}
+		
+		if(! $hash->{$fname}{fasta}){
+			print "! missing [$fpath]...\n";
+			$status = "missing";
+			last;
+		}
+		else{
+			$info .= " - [$fname] <fasta>";
+			$qfasta = $fname;
+			if(! -e $fname){
+				system("ln -s $fpath $fname");
+			}
+		}
+	}
+	else{
+		next;
+	}
+	
+	print "$info\n";
+}
+close $fh;
+
+return ($hash, $status);
+}
+
+
+#------------------------------------------------------------------------
+sub Read_qgenelist{
+my $qgene_list = shift;
+my $gff3 = shift;
+
+print "! reading gene ID list [$qgene_list]...\n";
+open(my $qfh, "<", $qgene_list) or die;
+my $hash = {};
+while(my $line = <$qfh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+#		print "! missing line\n";
+		next;
+	}
+	else{
+		my @Char = split(//, $line);
+		if($Char[0] =~ /\#/){
+			next;
+		}
+	}
+	
+	my @A;
+	my $qid;
+	if($line =~ /\t/){
+		@A = split(/\t/, $line);
+		$qid = $A[0];
+	}
+	elsif($line =~ /,/){
+		@A = split(/,/, $line);
+		$qid = $A[0];
+	}
+	else{
+		$qid = $line;
+	}
+	
+	if($qid){
+		$hash->{$qid} = 1;
+	}
+}
+close $qfh;
+
+print "! reading Gff [$gff3]...\n";
+open(my $fh, "<", $gff3) or die;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+#		print "! missing line\n";
+		next;
+	}
+	else{
+		my @Char = split(//, $line);
+		if($Char[0] =~ /\#/){
+			next;
+		}
+	}
+	
+	my @A = split(/\t/, $line);
+	my @tag = split(/\;/, $A[8]);
+	
+	if($A[2] eq 'gene'){
+		my $gid;
+		foreach my $val (@tag){
+			if($val =~ /ID\=/){
+				$gid = $val;
+				$gid =~ s/ID\=//;
+				last;
+			}
+		}
+		
+		if($hash->{$gid}){
+			$hash->{$gid} = $gid.",".$A[0].",".$A[3].",".$A[4].",".$A[6];
+			print " - [$gid] <OK>\n";
+		}
+	}
+}
+close $fh;
+
+return $hash;
+}
+
+
+#------------------------------------------------------------------------
+sub Open_gff2{
+my $gff3 = shift;
+
+print "! reading Gff [$gff3]...\n";
+open(my $fh, "<", $gff3) or die;
+my $g2t = {};
+my $t2g = {};
+my $hash = {};
+my @GID;
+my $gcnt = 0;
+my @L;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+#		print "! missing line\n";
+		next;
+	}
+	else{
+		my @Char = split(//, $line);
+		if($Char[0] =~ /\#/){
+			next;
+		}
+	}
+	
+	my @A = split(/\t/, $line);
+	my @tag = split(/\;/, $A[8]);
+	
+	if($A[2] eq 'gene'){
+		my $gid;
+		foreach my $val (@tag){
+			if($val =~ /ID\=/){
+				$gid = $val;
+				$gid =~ s/ID\=//;
+				last;
+			}
+		}
+		$gcnt++;
+		
+		push(@GID, $gid);
+		
+		$hash->{$gid}{data} = $gid.",".$A[0].",".$A[3].",".$A[4].",".$A[6];
+	}
+	elsif($A[2] eq 'transcript' || $A[2] eq 'mRNA' || $A[2] eq 'tRNA' || $A[2] eq 'snoRNA' || $A[2] eq 'rRNA' || $A[2] eq 'SRP_RNA' || $A[2] eq 'snRNA' || $A[2] eq 'microRNA'){
+		my $tid;
+		my $gid;
+		foreach my $val (@tag){
+			if($val =~ /ID\=/){
+				$tid = $val;
+				$tid =~ s/ID\=//;
+			}
+			elsif($val =~ /Parent\=/){
+				$gid = $val;
+				$gid =~ s/Parent\=//;
+			}
+			if($tid && $gid){
+				last;
+			}
+		}
+		
+		$g2t->{$gid} .= $tid."\n";
+		$t2g->{$tid} = $gid;
+		$hash->{$gid}{num_variant} += 1;
+	}
+	
+	push(@L, $line);
+}
+close $fh;
+
+foreach my $line (@L){
+	my @A = split(/\t/, $line);
+	my @tag = split(/\;/, $A[8]);
+	
+#	elsif($A[2] eq 'exon' || $A[2] eq 'CDS' || $A[2] eq 'start_codon' || $A[2] eq 'stop_codon'){
+	if($A[2] eq 'CDS'){
+		my $tid;
+		foreach my $val (@tag){
+			if($val =~ /Parent\=/){
+				$tid = $val;
+				$tid =~ s/Parent\=//;
+			}
+		}
+		
+		my @tmp = split(/,/, $tid);
+		if($tid =~ /AT/){
+			$tid = $tmp[0];
+		}
+		
+		unless($t2g->{$tid}){
+			print "! missing gid for [$tid] [$gff3]\n";
+			sleep(1);
+		}
+		
+		my $gid = $t2g->{$tid};
+		$hash->{$gid}{num_CDS} += 1;
+	}
+}
+
+print "  [$gcnt] genes\n";
+
+my $r = "gid,chr,pos0,pos1,strand,num_variant,total_num_CDS\n";
+my $numpc = 0;
+my $numnc = 0;
+my $numpc_tr = 0;
+my $hcnt = {};
+foreach my $gid (@GID){
+	unless($hash->{$gid}{num_variant}){
+		$hash->{$gid}{num_variant} = 0;
+	}
+	unless($hash->{$gid}{num_CDS}){
+		$hash->{$gid}{num_CDS} = 0;
+		$numnc++;
+	}
+	else{
+		$numpc++;
+		$numpc_tr += $hash->{$gid}{num_variant};
+	}
+	
+	my $tmp = $hash->{$gid}{data}.",".$hash->{$gid}{num_variant}.",".$hash->{$gid}{num_CDS};
+	my @B = split(/,/, $tmp);
+	$hcnt->{$B[1]} += 1;
+	$r .= $tmp."\n";
+}
+
+print "  [$numpc] protein-coding, [$numpc_tr] transcripts\n";
+print "  [$numnc] non-coding\n";
+
+my $alias_info = "alias\tID\n";
+my @TID = keys(%{$t2g});
+@TID = sort {$a cmp $b} @TID;
+
+my $halias = {};
+foreach my $tid (@TID){
+	unless($halias->{$tid}){
+		$alias_info .= "$tid\t$t2g->{$tid}\n";
+		$halias->{$tid} = 1;
+	}
+}
+
+my $rh = {};
+$rh->{g2t} = $g2t;
+$rh->{t2g} = $t2g;
+$rh->{t2g_alias} = $alias_info;
+$rh->{GID} = \@GID;
+$rh->{gid_txt} = join("\n", @GID);
+$rh->{ghash} = $hash;
+
+return $rh;
+}
+
+
+#-------------------------------------------------------------------------------
+sub CollectPrevJudge_v3{
+my $file = shift;
+my $hash = shift;
+my $i = shift;
+my $j = shift;
+my $gff3 = shift;
+my $hbinpath = shift;
+my $refgenome = shift;
+my $dbfasta = shift;
+my $status = shift;
+
+if(-e $file){
+	print "! reading previous result [$file]...\n";
+	open(my $fh, "<", $file);
+	my @L;
+	my $cnt = 0;
+	my $prev_ver = "false";		# result generated with version 1.01
+	while(my $line = <$fh>){
+		$line =~ s/\n//;
+		$line =~ s/\r//;
+		
+		unless($line){
+			next;
+		}
+		elsif($cnt == 0){
+			my @A = split(/\t/, $line);
+			my $numA = @A;
+			
+			if($numA < 39 && $line !~ /db protein length/){		# lacking the 'db protein length' column in the ver1.01
+				print "! num columns=[$numA], this is generated with ver1.01\n";
+				$prev_ver = "true";
+			}
+		}
+		push(@L, $line);
+		$cnt++;
+	}
+	close $fh;
+	
+	$cnt = 0;
+	if($status eq 'current' && $prev_ver eq 'true'){
+		print "! adding 'db protein length' column to [$file]...\n";
+		
+		my $dbprotein = $refgenome."_protein.fasta";
+		my $hdbprot = {};
+		unless(-e $dbprotein){
+			my $cmd3 = "$hbinpath->{gffread} $gff3 -g $dbfasta -y $dbprotein";
+			if(system($cmd3) != 0){
+				print "! gffread failed...\n";
+				die;
+			}
+		}
+		if(-e $dbprotein){
+			open(my $fh, "<", $dbprotein) or die;
+			my $cnt_prot = 0;
+			my $ID;
+			my $seq;
+			while(my $line = <$fh>){
+				$line =~ s/\n//;
+				$line =~ s/\r//;
+				my @A = split(/\t/, $line);
+				if($line =~ /\>/){
+					unless($cnt_prot == 0){
+						if($hdbprot->{$ID}){
+							print "! duplicated seq ID : [$ID]\n";
+						}
+						
+						my $len = length($seq);
+						$hdbprot->{$ID}{seq} = $seq;
+						$hdbprot->{$ID}{len} = $len;
+					}
+					
+					$ID = $line;
+					$ID =~ s/\>//;
+					my @tmp = split(/\s/, $ID);
+					$ID = $tmp[0];
+					$seq = "";
+					$cnt_prot++;
+				}
+				else{
+					$line =~ s/\.//g;
+					if($line){
+						$seq .= $line;
+					}
+				}
+			}
+			close $fh;
+
+			if($seq){
+				if($hdbprot->{$ID}){
+					print "! duplicated seq ID : [$ID]\n";
+				}
+				
+				my $len = length($seq);
+				$hdbprot->{$ID}{seq} = $seq;
+				$hdbprot->{$ID}{len} = $len;
+			}
+		}
+		else{
+			print "! missing [$dbprotein]...\n";
+			die;
+		}
+		
+		my $g2t = {};
+		my $t2g = {};
+		if($gff3){
+			open(my $fh, "<", $gff3) or die;
+			while(my $line = <$fh>){
+				$line =~ s/\n//;
+				$line =~ s/\r//;
+				
+				if($line =~ /\#/){
+					next;
+				}
+				
+				my @A = split(/\t/, $line);
+				unless($line){
+			#		print "! missing line\n";
+					next;
+				}
+				
+				my @tag = split(/\;/, $A[8]);
+				
+				if($A[2] eq 'gene'){
+					my $gid;
+					foreach my $val (@tag){
+						if($val =~ /ID\=/){
+							$gid = $val;
+							$gid =~ s/ID\=//;
+							last;
+						}
+					}
+				}
+				elsif($A[2] eq 'transcript' || $A[2] eq 'mRNA' || $A[2] eq 'tRNA' || $A[2] eq 'snoRNA' || $A[2] eq 'rRNA' || $A[2] eq 'SRP_RNA' || $A[2] eq 'snRNA' || $A[2] eq 'microRNA'){
+					my $tid;
+					my $gid;
+					foreach my $val (@tag){
+						if($val =~ /ID\=/){
+							$tid = $val;
+							$tid =~ s/ID\=//;
+						}
+						elsif($val =~ /Parent\=/){
+							$gid = $val;
+							$gid =~ s/Parent\=//;
+						}
+					}
+					$g2t->{$gid} .= $tid."\n";
+					$t2g->{$tid} = $gid;
+				}
+			}
+			close $fh;
+		}
+		
+		my $revl = "";
+		my $cnt_update = 0;
+		foreach my $line (@L){
+			my @A = split(/\t/, $line);
+			my $numA = @A;
+			
+			if($line =~ /directory/ && $line =~ /dbfasta/){
+				my @H;
+				for(my $i = 0; $i <= 32; $i++){
+					push(@H, $A[$i]);
+				}
+				push(@H, "db protein length");
+				
+				for(my $i = 33; $i < $numA; $i++){
+					push(@H, $A[$i]);
+				}
+				$revl .= join("\t", @H)."\n";
+			}
+			else{
+				my @revD;
+				for(my $i = 0; $i <= 32; $i++){
+					push(@revD, $A[$i]);
+				}
+				
+				my $gid = $A[23];
+				my $eachdbprotlen;
+				if($g2t->{$gid}){
+					my @TID = split(/\n/, $g2t->{$gid});
+					foreach my $tid (@TID){
+						if($hdbprot->{$tid}{len}){
+							$eachdbprotlen .= $hdbprot->{$tid}{len}.",";
+						}
+					}
+				}
+				if($eachdbprotlen){
+					push(@revD, $eachdbprotlen);
+					$cnt_update++;
+				}
+				else{
+					push(@revD, "-");
+				}
+				
+				for(my $i = 33; $i < $numA; $i++){
+					push(@revD, $A[$i]);
+				}
+				$revl .= join("\t", @revD)."\n";
+				
+				if($i == 0){
+					if($A[22] =~ /present/ && $A[22] !~ /collapsed/ && $A[22] !~ /partly/ && $A[19] ne '0'){
+						$hash->{$A[23]} = 1;
+					}
+				}
+				else{
+					if($A[22] =~ /present/){
+						$hash->{$A[23]} = 1;
+					}
+				}
+			}
+			$cnt++;
+		}
+		
+		print "! [$cnt_update] updated\n";
+		
+		if($revl){
+			my $bkup = $file.".prev";
+			unless(-e $bkup){
+				system("mv $file $bkup");
+			}
+			else{
+				system("rm $file");
+			}
+			
+			open(my $rfh, ">", $file);
+			print $rfh $revl;
+			close $rfh;
+		}
+	}
+	elsif($status eq 'current' && $prev_ver eq 'false'){
+		foreach my $line (@L){
+			if($line =~ /directory/ && $line =~ /dbfasta/){
+				next;
+			}
+			
+			my @A = split(/\t/, $line);
+			if($i == 1 && $j == 0){
+				if($A[22] eq 'present' && $A[19] ne '0'){
+					my $promoterutr_judge = 0;
+					my $lowth = 0.95;
+					my $upth = 1.05;
+					
+					if(defined $A[25] && $A[25] =~ /\;/){
+						# ratio_hit; ratio_span; rev_ratio_span; P2Gdist; span_pos0; span_pos1
+						my @tmpA = split(/\;/, $A[25]);
+						if($tmpA[1] && $tmpA[2] && $tmpA[1] ne 'null' && $tmpA[2] ne 'null'){
+							if($lowth <= $tmpA[1] && $lowth <= $tmpA[2] && $tmpA[1] <= $upth && $tmpA[2] <= $upth){
+								$promoterutr_judge++;
+							}
+						}
+					}
+					if(defined $A[27] && $A[27] =~ /\;/){
+						# ratio_hit; ratio_span; rev_ratio_span; P2Gdist; span_pos0; span_pos1
+						my @tmpA = split(/\;/, $A[27]);
+						if($tmpA[1] && $tmpA[2] && $tmpA[1] ne 'null' && $tmpA[2] ne 'null'){
+							if($lowth <= $tmpA[1] && $lowth <= $tmpA[2] && $tmpA[1] <= $upth && $tmpA[2] <= $upth){
+								$promoterutr_judge++;
+							}
+						}
+					}
+					
+					if($promoterutr_judge == 2){
+						$hash->{$A[23]} = 1;
+					}
+					else{
+						$hash->{$A[23]} = -1;
+					}
+				}
+			}
+			elsif($i != 1 && $j == 0){
+				if($A[22] eq 'present' && $A[19] ne '0'){
+					$hash->{$A[23]} = 1;
+				}
+			}
+			elsif($j > 0){
+				if($A[22] !~ /missing border/){			# use all results except 'missing border' status
+					if($A[22] =~ /present/ || $A[22] =~ /insertion/){
+						$hash->{$A[23]} = 1;
+					}
+				}
+			}
+			$cnt++;
+		}
+	}
+	elsif($status eq 'prev' && $prev_ver eq 'false'){
+		foreach my $line (@L){
+			if($line =~ /directory/ && $line =~ /dbfasta/){
+				next;
+			}
+			
+			my @A = split(/\t/, $line);
+			if($A[22] !~ /missing border/){			# use all results except 'missing border' status
+				$hash->{$A[23]} = 1;
+			}
+			$cnt++;
+		}
+	}
+}
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Search_absentJudge{
+my $hash = shift;
+my $genelist = shift;
+my $tmplist = shift;
+
+my $r;
+my $cnt_present = 0;
+my $cnt_absent = 0;
+my $cnt_misproutr = 0;
+if(-e $genelist){
+	print "! reading entry list [$genelist]...\n";
+	open(my $fh, "<", $genelist);
+	my $cnt = 0;
+	while(my $line = <$fh>){
+		$line =~ s/\n//;
+		$line =~ s/\r//;
+		
+		if(! $line || $line =~ /gid/ || $line =~ /total_num_CDS/){
+			next;
+		}
+		
+		my @A = split(/,/, $line);
+		if(! defined $hash->{$A[0]}){
+			$r .= $line."\n";
+			$cnt_absent++;
+		}
+		elsif($hash->{$A[0]} < 0){
+			$r .= $line."\n";
+			$cnt_misproutr++;
+			$cnt_absent++;
+		}
+		else{
+			$cnt_present++;
+		}
+		$cnt++;
+	}
+	close $fh;
+	
+	if($cnt_misproutr > 0){
+		print "! previous judge : P=[$cnt_present], A=[$cnt_absent ($cnt_misproutr)]\n";
+	}
+	else{
+		print "! previous judge : P=[$cnt_present], A=[$cnt_absent]\n";
+	}
+}
+
+if($r){
+	open(my $rfh, ">", $tmplist);
+	print $rfh $r;
+	close $rfh;
+}
+
+return $cnt_absent;
+}
+
+
+#----------------------------------------------------------------------
+sub Path2pref{
+my $file = shift;
+
+if($file && $file ne 'null'){
+	my @tmp = split(/\//, $file);
+	my $n = @tmp;
+	$tmp[$n - 1] =~ s/\.fasta//;
+	$tmp[$n - 1] =~ s/\.fa//;
+	return $tmp[$n - 1];
+}
+
+}
+
+
+#----------------------------------------------------------------------
+sub CpFile{
+my $file = shift;
+
+if($file && $file ne 'null'){
+	my @tmp = split(/\//, $file);
+	my $n = @tmp;
+	
+	if(-e $tmp[$n - 1]){
+		system("rm $tmp[$n - 1]");
+	}
+	
+	if(-e $file){
+		system("cp $file ./");
+	}
+	elsif(-e "../$file"){
+		system("cp ../$file ./");
+	}
+	
+	return $tmp[$n - 1];
+}
+
+}
+
+
+#----------------------------------------------------------
+sub ADD{
+my $file = shift;
+my $str = shift;
+
+if($str){
+	open(my $fh, ">>", $file) or die;
+	print $fh $str;
+	close $fh;
+	
+	#print "! output [$file]\n";
+}
+
+}
+
+
+#----------------------------------------------------------
+sub SAVE{
+my $file = shift;
+my $str = shift;
+
+if($str){
+	open(my $fh, ">", $file) or die;
+	print $fh $str;
+	close $fh;
+	
+	#print "! output [$file]\n";
+}
+
+}
+
+
+#----------------------------------------------------------
+sub APPEND{
+my $file = shift;
+my $str = shift;
+
+open(my $fh, ">>", $file) or die;
+print $fh $str;
+close $fh;
+
+#print "! output [$file]\n";
+
+}
+
+
+#-------------------------------------------------------------------------------
+sub Delete{
+my $file = shift;
+
+if(-e $file){
+	system("rm $file");
+}
+
+}
+
+
+#---------------------------------------------------------------------
+sub Search_app2{
+my $hbin = shift;
+my $APP = shift;
+my $hpath = shift;
+my $script_path = shift;
+my $pipeline = shift;
+
+my $tmp = "_Search_app_temp.txt";
+for(my $i = 0; $i < 100; $i++){
+	if(-e $tmp){
+		$tmp = "_Search_app_temp.$i.txt";
+	}
+	if(! -e $tmp){
+		last;
+	}
+}
+
+unless($pipeline){
+	print "! checking PATH of required programs...\n";
+}
+my $hash = {};
+foreach my $app (@{$APP}){
+	my $Bin = $hbin->{$app};
+	if($hpath->{$app} && -e $hpath->{$app}){
+		my @F = glob("$hpath->{$app}/*");
+		foreach my $bin (@{$Bin}){
+			foreach my $f (@F){
+				if($f =~ /$bin/){
+					$hash->{$bin} = $f;
+				}
+			}
+		}
+	}
+	else{
+		foreach my $bin (@{$Bin}){
+			system("which $bin > $tmp 2>&1");
+			system("which $bin.pl >> $tmp 2>&1");
+			system("find $script_path/bin | grep $bin >> $tmp 2>&1");
+			
+			open(my $fh, "<", $tmp);
+			while(my $line = <$fh>){
+				$line =~ s/\n//;
+				$line =~ s/\r//;
+				
+				if($line && $line =~ /$bin/i && $line !~ /which: no/){
+					if($line =~ /\//){
+						my @D = split(/\//, $line);
+						my $nD = @D;
+						$D[$nD - 1] =~ s/\.pl//;
+						if($D[$nD - 1] eq $bin){
+							$hash->{$bin} = $line;
+						}
+					}
+					else{
+						$hash->{$bin} = $line;
+					}
+				}
+			}
+			close $fh;
+			
+			system("rm $tmp");
+		}
+	}
+	
+	foreach my $bin (@{$Bin}){
+		if($hash->{$bin} && -e $hash->{$bin}){
+			unless($pipeline){
+				if($bin !~ /interpro/){
+					print " [$bin] = [$hash->{$bin}] <OK>\n";
+				}
+				elsif($bin =~ /interpro/){
+					my $testcmd = "$hash->{$bin} --version > $tmp";
+					system($testcmd);
+					
+					my $iprver;
+					open(my $fh, "<", $tmp);
+					while(my $line = <$fh>){
+						$line =~ s/\n//;
+						$line =~ s/\r//;
+						
+						if($line && $line =~ /InterProScan version/i){
+							$line =~ s/InterProScan version//;
+							$line =~ s/\s//g;
+							my @tmp2 = split(/\-/, $line);
+							if($tmp2[0] =~ /5\./){
+								$iprver = $tmp2[0];
+							}
+						}
+					}
+					close $fh;
+					
+					system("rm $tmp");
+					
+					if(! $iprver || $iprver !~ /5\./){
+						print " NOT found [$bin], please check PATH\n";
+						$hash->{err} += 1;
+					}
+					elsif($iprver =~ /5\./){
+						print " [$bin] = [$hash->{$bin}] <OK> (version $iprver)\n";
+					}
+				}
+			}
+		}
+		else{
+			print " NOT found [$bin], please check PATH\n";
+			$hash->{err} += 1;
+		}
+	}
+}
+
+return $hash;
+}
+
+
+#----------------------------------------------------------
+sub Check_script_permission{
+my $path = shift;
+my $HOME = shift;
+
+my $tmp = "$HOME/__tmp_cnDB";
+system("ls -all $path > $tmp");
+system("ls -all $path/scripts >> $tmp");
+
+my $judge = 0;
+unless(-e $tmp){
+	print "! error : you don't have write permission in the current directory ...\n";
+	$judge++;
+}
+else{
+	open(my $fh, "<", $tmp);
+	while(my $line = <$fh>){
+		$line =~ s/\n//;
+		$line =~ s/\r//;
+		
+		my @A = split(/\s/, $line);
+		my $n = @A;
+		my $permission = $A[0];
+		my $file = $A[$n - 1];
+		
+		if($permission =~ /d/){
+			next;
+		}
+		elsif($file =~ /\.pl/ || $file =~ /\.pm/ || $file =~ /construct_corenetDB/){
+			if(-e "$path/$file"){
+				$file = "$path/$file";
+			}
+			elsif(-e "$path/scripts/$file"){
+				$file = "$path/scripts/$file";
+			}
+			
+			if($permission !~ /-..x....../){
+				print "! error : change file permissions to executable : [$file ($permission)] ...\n";
+				$judge++;
+			}
+		}
+	}
+	close $fh;
+}
+
+if(-e $tmp){
+	system("rm $tmp");
+}
+
+return $judge;
+}
+
