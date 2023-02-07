@@ -10,7 +10,7 @@ use FindBin;
 my $version = "\n";
 $version .= "unitesummary.pl version 1.31\n";
 $version .= "last update: [2022\/11\/30]\n";
-$version .= "copyright: ryoichi yano [ryoichiy104\@gmail.com]\n";
+$version .= "copyright: ryoichi yano\n";
 
 #print $version;
 
@@ -332,6 +332,21 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 	#	push(@Geno5, 1);	#reference
 		
 		#-----------------------------------------------------//
+		my $failprot_refgenome = 0;
+		foreach my $id (@Samples){
+			if($refgenome ne 'null'){
+				if($id eq $refgenome){
+					if(! $hash->{svprot}{$id}{$gid} || $hash->{svprot}{$id}{$gid} eq '-'){
+						$failprot_refgenome = 1;
+					}
+					elsif($hash->{svprot}{$id}{$gid} < 0.97){
+						$failprot_refgenome = 1;
+					}
+					last;
+				}
+			}
+		}
+		
 		my $judge_refgenome = "-";
 		foreach my $id (@Samples){
 			if(! $hash->{sv}{$id}{$gid} || $hash->{sv}{$id}{$gid} eq '-'){
@@ -646,7 +661,7 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 					$cnt_geno102++;
 				}
 #				if($num_nonzero3 > 0 && $num_nodata3 == 0){
-				if($num_nonzero3 > 0){
+				if($num_nonzero3 > 0 && $failprot_refgenome == 0){
 					$r103 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value103}{$gid}.",".join(",", @Geno103)."\n";
 					$hgeneclass->{transloc_prot}{$gid} = 1;
 					$cnt_geno103++;
@@ -691,7 +706,7 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 						$cnt_geno202++;
 					}
 	#				if($num_nonzero3 > 0 && $num_nodata3 == 0){
-					if($num_nonzero3 > 0){
+					if($num_nonzero3 > 0 && $failprot_refgenome == 0){
 						$r203 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value203}{$gid}.",".join(",", @Geno203)."\n";
 						$hgeneclass->{transloc_prot}{$gid} = 1;
 						$cnt_geno203++;
@@ -741,7 +756,7 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 						$cnt_geno302++;
 					}
 	#				if($num_nonzero3 > 0 && $num_nodata3 == 0){
-					if($num_nonzero3 > 0){
+					if($num_nonzero3 > 0 && $failprot_refgenome == 0){
 						$r303 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value303}{$gid}.",".join(",", @Geno303)."\n";
 						$hgeneclass->{transloc_prot}{$gid} = 1;
 						$cnt_geno303++;
@@ -790,7 +805,7 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 			$cnt_geno2++;
 		}
 #		if($num_nonzero3 > 0 && $num_nodata3 == 0){
-		if($num_nonzero3 > 0){
+		if($num_nonzero3 > 0 && $failprot_refgenome == 0){
 			$r5 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
 			$hgeneclass->{prot}{$gid} = 1;
 			$cnt_geno5++;
@@ -838,7 +853,7 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 				$hgeneclass->{raw_1cnsv}{$gid} = 1;
 				$cnt_geno12++;
 			}
-			if($num_nonzero3 > 0 && $num_nodata3 == 0){
+			if($num_nonzero3 > 0 && $num_nodata3 == 0 && $failprot_refgenome == 0){
 				$r15 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
 				$r15_nmatrix .= $gid.",".join(",", @Geno3)."\n";
 				$hgeneclass->{prot_1cnsv}{$gid} = 1;
@@ -869,7 +884,7 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 				$hgeneclass->{raw_allgeno}{$gid} = 1;
 				$cnt_geno4++;
 			}
-			if($num_nonzero3 > 0 && $num_nodata3 == 0){
+			if($num_nonzero3 > 0 && $num_nodata3 == 0 && $failprot_refgenome == 0){
 				$r6 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
 				$hgeneclass->{prot_allgeno}{$gid} = 1;
 				$cnt_geno6++;
@@ -1632,7 +1647,7 @@ if(-e $file){
 			$hash->{sv2}{$id}{$gid} = $sv2;
 			$hash->{svprom}{$id}{$gid} = $promoter;
 			$hash->{svutr3}{$id}{$gid} = $utr3;
-			$hash->{svprot}{$id}{$gid} = $sv;
+#			$hash->{svprot}{$id}{$gid} = $sv;
 			
 			$hash->{svjudge1}{$id}{$gid} = $A[22];					# native judge
 			$hash->{svjudge2}{$id}{$gid} = "null";
@@ -1651,13 +1666,38 @@ if(-e $file){
 			
 			my $rprot = 0;
 			if($A[34] && $A[34] ne '-' && $A[34] && $A[35] ne '-' && $A[35] ne '.'){
-				$rprot = $A[34] / $A[35];
+#				$rprot = $A[34] / $A[35];
+				my @DBplen = split(/,/, $A[33]);
+				my @DBplenr;
+				foreach my $val (@DBplen){
+					if(defined $val && $val =~ /\d/ && $val !~ /\D/ && $val > 0){
+						push(@DBplenr, $val);
+					}
+				}
+				@DBplenr = sort {$b <=> $a} @DBplenr;
+				
+				if($DBplenr[0]){
+					my $protlen_db = $DBplenr[0];
+					my $protlen_q = $A[34];
+					my $alnlen = $A[35];
+					my $pcnt_similarity = $A[36];
+					my $pcnt_gap = $A[37];
+					
+					my $dbprot_factor = log($protlen_db) / log(10);
+					my $difflen_ratio = abs($protlen_db - $protlen_q) / $protlen_db;
+					
+					$rprot = ($pcnt_similarity - $pcnt_gap) / 100 - ($difflen_ratio ** $dbprot_factor);
+					if($rprot < 0){
+						$rprot = 0;
+					}
+				}
 			}
 			$hash->{rprot}{$id}{$gid} = $rprot;
+			$hash->{svprot}{$id}{$gid} = $rprot;
 			
-			if(defined $sv && $sv ne '-' && $rprot < $sv){
-				$hash->{svprot}{$id}{$gid} = $rprot;
-			}
+#			if(defined $sv && $sv ne '-' && $rprot > $sv){
+#				$hash->{svprot}{$id}{$gid} = $rprot;
+#			}
 			
 			if($refgenome ne 'null' && $hseqinfo->{$id}){
 				if(defined $A[8] && defined $A[9] && $A[9] ne '-' && $A[9] ne 'null' && $A[9] !~ /\D/ && $A[9] =~ /\d/ && defined $A[10] && $A[10] ne '-' && $A[10] ne 'null' && $A[10] !~ /\D/ && $A[10] =~ /\d/){

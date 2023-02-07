@@ -11,7 +11,7 @@ use Getopt::Long;
 my $version = "\n";
 $version .= "batch_psl2sv.pl version 1.01\n";
 $version .= "last update: [2020\/11\/22]\n";
-$version .= "copyright: ryoichi yano [ryoichiy104\@gmail.com]\n";
+$version .= "copyright: ryoichi yano\n";
 
 #print $version;
 

@@ -8,7 +8,7 @@ use Cwd;
 my $version = "\n";
 $version .= "psl2dot.pl version 1.02\n";
 $version .= "last update: [2020\/1\/19]\n";
-$version .= "copyright: ryoichi yano [ryoichiy104\@gmail.com]\n";
+$version .= "copyright: ryoichi yano\n";
 
 #print $version;
 

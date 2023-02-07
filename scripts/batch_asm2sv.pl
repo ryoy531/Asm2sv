@@ -12,7 +12,7 @@ use Sys::Hostname;
 my $version = "\n";
 $version .= "batch_asm2sv.pl version 1.01\n";
 $version .= "last update: [2020\/2\/12]\n";
-$version .= "copyright: ryoichi yano [ryoichiy104\@gmail.com]\n";
+$version .= "copyright: ryoichi yano\n";
 
 #print $version;
 

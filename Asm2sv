@@ -11,7 +11,7 @@ use Sys::Hostname;
 my $version = "#------------------------------------------------------------\n";
 $version .= "Asm2sv version 1.42\n";
 $version .= "last update: [2023\/1\/28]\n";
-$version .= "copyright: ryoichi yano [ryoichiy104\@gmail.com]\n";
+$version .= "copyright: ryoichi yano\n";
 $version .= "#------------------------------------------------------------\n";
 
 print "\n$version";
@@ -88,7 +88,7 @@ elsif($ARGV[0] ne 'run' && $ARGV[0] ne 'check' && $ARGV[0] ne 'makecmd' && $ARGV
 	$status = "missing";
 	goto END;
 }
-elsif($ARGV[0] eq 'run' || $ARGV[0] eq 'check'){
+elsif($ARGV[0] eq 'run'){
 	#---------------------------------------------------------//
 	my $dir;
 	my $dbfasta;
@@ -436,6 +436,37 @@ elsif($ARGV[0] eq 'run' || $ARGV[0] eq 'check'){
 	my $rorf_final = "selected_predict_orf_".$qpref.".fasta";
 	my $log_final = "final_log_stats_".$qpref.".tsv";
 	Summarize_result($hcollect, $genelist, $dbpref, $qpref, $g2tdb, $rfile_final, $log_final, $neighbor_tlen, $skip_orfsearch, $rorf_final);
+}
+elsif($ARGV[0] eq 'check'){
+	#---------------------------------------------------------//
+	my @APP;
+	push(@APP, "samtools");
+	push(@APP, "gffread");
+	push(@APP, "gth");
+	push(@APP, "blat");
+	push(@APP, "blat2hints");
+	push(@APP, "matcher");
+	push(@APP, "lastdb");
+	push(@APP, "lastal");
+	push(@APP, "makeblastdb");
+	push(@APP, "blastn");
+	push(@APP, "maf-convert");
+	
+	print "\n";
+	my $hbin = {};
+	foreach my $app (@APP){
+		$hbin->{$app}[0] = $app;
+	}
+	my $hpath = {};
+	my $hbinpath = Search_app2($hbin, \@APP, $hpath, $script_path, "");
+	if($hbinpath->{err}){
+		print "! some missing program(s)..., please confirm program is in PATH.\n";
+		goto END;
+	}
+	if($ARGV[0] eq 'check'){
+		print "\n! Found all (looks good).\n";
+		goto END;
+	}
 }
 elsif($ARGV[0] eq 'makecmd'){
 	#---------------------------------------------------------//

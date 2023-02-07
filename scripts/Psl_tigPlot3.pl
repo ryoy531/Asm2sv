@@ -10,7 +10,7 @@ use FindBin;
 my $version = "\n";
 $version .= "Psl_tigPlot3.pl version 1.01\n";
 $version .= "last update: [2020\/2\/12]\n";
-$version .= "copyright: ryoichi yano [ryoichiy104\@gmail.com]\n";
+$version .= "copyright: ryoichi yano\n";
 
 #print $version;
 
