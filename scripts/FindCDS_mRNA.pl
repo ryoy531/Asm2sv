@@ -5,8 +5,8 @@ use threads;
 
 #-------------------------------------------------------------------------------
 my $version = "\n";
-$version .= "Find_bestCDS.pl version 1.01\n";
-$version .= "last update: [2019\/3\/7]\n";
+$version .= "Find_bestCDS.pl version 1.42\n";
+$version .= "last update: [2023\/1\/28]\n";
 $version .= "copyright: ryoichi yano\n";
 
 #-------------------------------------------------------------------------------

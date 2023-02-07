@@ -8,8 +8,8 @@ use FindBin;
 
 #-------------------------------------------------------------------------------
 my $version = "\n";
-$version .= "unitesummary.pl version 1.31\n";
-$version .= "last update: [2022\/11\/30]\n";
+$version .= "unitesummary.pl version 1.42\n";
+$version .= "last update: [2023\/2\/7]\n";
 $version .= "copyright: ryoichi yano\n";
 
 #print $version;

@@ -8,8 +8,8 @@ use FindBin;
 
 #-------------------------------------------------------------------------------
 my $version = "\n";
-$version .= "Psl_tigPlot3.pl version 1.01\n";
-$version .= "last update: [2020\/2\/12]\n";
+$version .= "Psl_tigPlot3.pl version 1.42\n";
+$version .= "last update: [2023\/1\/28]\n";
 $version .= "copyright: ryoichi yano\n";
 
 #print $version;
