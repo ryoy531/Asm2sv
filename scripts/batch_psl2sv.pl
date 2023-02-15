@@ -625,6 +625,10 @@ while(my $line = <$fh>){
 	$line =~ s/\r//;
 	$line =~ s/\"//g;
 	
+	if($line =~ /\#/){
+		next;
+	}
+	
 	my @A = split(/\t/, $line);
 	my @B = split(/,/, $A[2]);
 	$hash->{$A[0]}{$A[2]} = $A[1];
