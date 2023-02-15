@@ -6,7 +6,7 @@ Asm2sv is designed to perform gene-level analysis of structural genomic variatio
 
 ## Prerequisite and installation
 
-```diff
-+ this will be highlighted in green
+```
+ this will be highlighted in green
 - this will be highlighted in red
 ```
