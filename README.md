@@ -4,7 +4,7 @@ Asm2sv is an assembly-based comparative genomics pipeline designed to investigat
 
 
 
-## Prerequisite and installation
+## Installation and prerequisites
 
 ```
  this will be highlighted in green
