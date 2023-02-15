@@ -1348,6 +1348,10 @@ while(my $line = <$fh>){
 	$line =~ s/\r//;
 	$line =~ s/\"//g;
 	
+	if($line =~ /\#/){
+		next;
+	}
+	
 	# example of chrinfo (tsv)
 	#	prefix		convert_ID	original_ID
 	#	Gmax_189	chr01		Gm01
