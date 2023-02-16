@@ -33,7 +33,15 @@ We have validated the Asm2sv pipeline with the following environment:
 - genome threader<sup>[*4]</sup>
 
 <sup>[*1]</sup> Perl modules can be installed with `cpan install` command.  
+<sup>[*2]</sup> These can be installed with `miniconda3` in which `bioconda` and `conda-forge` channels are added.  
+<sup>[*3]</sup> These can be installed with `apt-get install` command.  
+<sup>[*4]</sup> Included in the bin directory.  
+<sup>[*2,3,4]</sup> They must be in your PATH.
 
+## Installation
+
+
+## Commands and tutorial
 
 
 ```
