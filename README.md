@@ -56,15 +56,19 @@ Asm2sv has multiple command options as follows. We would like to show the usages
 ```
 /path/to/Asm2sv gfftolist -g [reference Gff3]
 ```
+
 - `run` analyzes gene-level SVs present in target genome using reference genome as a base.
 ```
 /path/to/Asm2sv run -d [reference fasta] -g [reference Gff3] -l [gene query list] -q [target fasta] -o [working directory] -t [CPU1] -x [CPU2] -n 5000
 ```
-<sup>CPU1: CPU threads used for genomic alignment analysis</sup>  
-<sup>CPU2: CPU threads used for gene prediction with genome threader</sup>  
-<sup>`-n 5000` means flanking 5000 bp is analyzed together with gene region (promoter and 3'-UTR)</sup>  
+<sup>`-t [CPU1]`: CPU threads used for genomic alignment analysis</sup>  
+<sup>`-x [CPU2]`: CPU threads used for gene prediction with genome threader</sup>  
+<sup>`-n 5000` means flanking 5000 bp is analyzed together with gene region (e.g. promoter and 3'-UTR region)</sup>  
 
-- makecmd
+- `makecmd` produces a suite of command lines for multiple target genomes.
+```
+/path/to/Asm2sv makecmd -i [target genome list (.csv)] -t [CPU1] -x [CPU2] -n 5000
+```
 - unite
 - plot
 
