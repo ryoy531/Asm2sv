@@ -50,9 +50,14 @@ By the following command, you can check whether all required programs are in you
 /path/to/Asm2sv check
 ```
 
-
 ## Commands and tutorial
-
+Asm2sv has multiple commands as follows. We would like to show the usages through the tutorial presented below.
+- check
+- gfftolist
+- run
+- makecmd
+- unite
+- plot
 
 
 
