@@ -24,19 +24,20 @@ We have validated the Asm2sv pipeline with the following environment:
   - FindBin
   - Getopt::Long
   - Sys::Hostname
-- samtools (1.12 or higher)<sup>[*2]</sup>
-- gffread<sup>[*2]</sup>
-- blat<sup>[*2]</sup>
-- BLAST (2.10.1+ or higher)<sup>[*2]</sup>
-- LAST<sup>[*3]</sup>
-- matcher<sup>[*3]</sup>
-- genome threader<sup>[*4]</sup>
+- Third-party programs<sup>[*2]</sup>
+  - samtools (1.12 or higher)<sup>[*3]</sup>
+  - gffread<sup>[*3]</sup>
+  - blat<sup>[*3]</sup>
+  - BLAST (2.10.1+ or higher)<sup>[*3]</sup>
+  - LAST<sup>[*4]</sup>
+  - matcher<sup>[*4]</sup>
+  - genome threader<sup>[*5]</sup>
 
 <sup>[*1]</sup> Perl modules can be installed with `cpan install` command.  
-<sup>[*2]</sup> These can be installed with `miniconda3` in which `bioconda` and `conda-forge` channels are added.  
-<sup>[*3]</sup> These can be installed with `apt-get install` command.  
-<sup>[*4]</sup> Included in the bin directory.  
-<sup>[*2,3,4]</sup> They must be in your PATH.
+<sup>[*2]</sup> They must be in your PATH.  
+<sup>[*3]</sup> These can be installed with `miniconda3` in which `bioconda` and `conda-forge` channels are added.  
+<sup>[*4]</sup> These can be installed with `apt-get install` command.  
+<sup>[*5]</sup> Included in the bin directory.  
 
 ## Installation
 
