@@ -50,8 +50,8 @@ By the following command, you can check whether all required programs are in you
 /path/to/Asm2sv check
 ```
 
-## Commands and tutorial
-Asm2sv has multiple command options as follows. We would like to show the usages through the tutorial dataset. Please obtain it via [Daizu-net](https://daizu-net.dna.affrc.go.jp/ap/top)
+## Commands
+Asm2sv has multiple command options as follows. Tutorial is also available (see below).
 - `gfftolist` produces a gene query list file based on reference Gff3 file. The output list file can be used in the `run` command.
 ```
 /path/to/Asm2sv gfftolist -g [reference Gff3]
@@ -72,6 +72,8 @@ Asm2sv has multiple command options as follows. We would like to show the usages
 - unite
 - plot
 
+## Tutorial
+Here, we would like to show the usages of command options based on tutorial dataset. Please obtain it via [Daizu-net](https://daizu-net.dna.affrc.go.jp/ap/top)
 
 
 The genome sequence data included in this tutorial originate from previously published data of other research groups. To use them as tutorial data, we have modified data to reduce file sizes. Please note that these files are different from the original ones.
