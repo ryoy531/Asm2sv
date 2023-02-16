@@ -42,7 +42,12 @@ We have validated the Asm2sv pipeline with the following environment:
 ## Installation
 Download zip or type the following git command:
 ```
-git clone 
+git clone https://github.com/ryoy531/Asm2sv.git
+```
+
+By the following command, you can check whether all required programs are in your PATH.
+```
+/path/to/Asm2sv check
 ```
 
 
