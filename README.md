@@ -3,12 +3,12 @@ Asm2sv is an assembly-based comparative genomics pipeline that analyzes gene-lev
 
 ## System requirements
 Minimum (small genome)  
-- CPU: 16 core/32 threads
-- RAM: 128 GB
+- CPU: 16 core/32 threads (e.g. AMD ryzen 5950x)
+- RAM: >128 GB
 
 Recommend (genome size >500 Mb)
-- CPU: 32 core/64 threads
-- RAM: 256 GB
+- CPU: 32 core/64 threads (e.g. AMD ryzen threadripper)
+- RAM: >256 GB
 
 *SSD raid disk is desirable to speed up analysis.  
 
