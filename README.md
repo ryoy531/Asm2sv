@@ -52,8 +52,10 @@ By the following command, you can check whether all required programs are in you
 
 ## Commands and tutorial
 Asm2sv has multiple command options as follows. We would like to show the usages through the tutorial dataset. Please obtain it via [Daizu-net](https://daizu-net.dna.affrc.go.jp/ap/top)
-- check
 - gfftolist
+```
+/path/to/Asm2sv gfftolist -g [reference gff3]
+```
 - run
 - makecmd
 - unite
