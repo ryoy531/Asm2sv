@@ -52,11 +52,18 @@ By the following command, you can check whether all required programs are in you
 
 ## Commands and tutorial
 Asm2sv has multiple command options as follows. We would like to show the usages through the tutorial dataset. Please obtain it via [Daizu-net](https://daizu-net.dna.affrc.go.jp/ap/top)
+- `gfftolist` produces a gene query list file based on reference Gff3 file. The output list file can be used in the `run` command.
 ```
 /path/to/Asm2sv gfftolist -g [reference Gff3]
 ```
-<sup>gfftolist produces a gene query list file based on reference Gff3 file</sup>
-- run
+- `run` analyzes gene-level SVs present in target genome using reference genome as a base.
+```
+/path/to/Asm2sv run -d [reference fasta] -g [reference Gff3] -l [gene query list] -q [target fasta] -o [working directory] -t [CPU1] -x [CPU2] -n 5000
+```
+<sup>CPU1: CPU threads used for genomic alignment analysis</sup>  
+<sup>CPU2: CPU threads used for gene prediction with genome threader</sup>  
+<sup>`-n 5000` means flanking 5000 bp is analyzed together with gene region (promoter and 3'-UTR)</sup>  
+
 - makecmd
 - unite
 - plot
