@@ -52,10 +52,10 @@ By the following command, you can check whether all required programs are in you
 
 ## Commands and tutorial
 Asm2sv has multiple command options as follows. We would like to show the usages through the tutorial dataset. Please obtain it via [Daizu-net](https://daizu-net.dna.affrc.go.jp/ap/top)
-- gfftolist
 ```
-/path/to/Asm2sv gfftolist -g [reference gff3]
+/path/to/Asm2sv gfftolist -g [reference Gff3]
 ```
+<sup>gfftolist produces a gene query list file based on reference Gff3 file</sup>
 - run
 - makecmd
 - unite
