@@ -18,7 +18,23 @@ Recommend (genome size >500 Mb)
 We have validated the Asm2sv pipeline with the following environment:  
 - Ubuntu 20.04 LTS
 - perl 5.30 or higher
+- perl modules<sup>[*1]</sup>: 
+  - strict
+  - warnings
+  - threads
+  - Cwd
+  - FindBin
+  - Getopt::Long
+  - Sys::Hostname
+- samtools (1.12 or higher)<sup>[*2]</sup>
+- gffread<sup>[*2]</sup>
+- blat<sup>[*2]</sup>
+- BLAST (2.10.1+ or higher)<sup>[*2]</sup>
+- LAST<sup>[*3]</sup>
+- matcher<sup>[*3]</sup>
+- genome threader<sup>[*4]</sup>
 
+<sup>[*1]</sup> Perl modules can be installed with `cpan install` command.  
 
 
 
