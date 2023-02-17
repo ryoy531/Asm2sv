@@ -51,13 +51,14 @@ By the following command, you can check whether all required programs are in you
 ```
 
 ## Command options
-Asm2sv has multiple command options as follows. Tutorial is also available (see below).
+Asm2sv has multiple command options as follows. Detailed usage is described in the Tutorial section below.  
+
 - `gfftolist` produces a gene query list file based on reference Gff3 file. The output list file can be used in the `run` command.
 ```
 /path/to/Asm2sv gfftolist -g [reference Gff3]
 ```
 
-- `run` analyzes gene-level SVs present in target genome using reference genome as a base.
+- `run` analyzes gene-level SVs present in target genome using reference genome as a base.  
 ```
 /path/to/Asm2sv run -d [reference fasta] -g [reference Gff3] -l [gene query list] -q [target fasta] -o [working directory] -t [CPU1] -x [CPU2] -n 5000
 ```
@@ -80,7 +81,6 @@ Asm2sv has multiple command options as follows. Tutorial is also available (see 
 /path/to/Asm2sv run -d [reference fasta] -g [reference Gff3] -q [list of target fasta (.csv or .txt)] -i [gene query list] -o [working directory] -t [CPU1] -f [flanking seq length] -n 5000
 ```
 <sup>`-f` specifies the length of flanking sequence that is shown in genomic alignment plot (.png image file) together with gene region.</sup>  
-
 
 ## Tutorial
 Here, we would like to show the usages of command options based on tutorial dataset. Please obtain it via [Daizu-net](https://daizu-net.dna.affrc.go.jp/ap/top)
