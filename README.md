@@ -11,7 +11,7 @@ Recommend (genome size >500 Mb)
 - CPU: 32 core/64 threads (e.g. AMD ryzen threadripper)
 - RAM: >256 GB
 
-*SSD raid disk is desirable to speed up analysis.  
+*SSD raid disk is mandatory in both cases.  
 <br></br>
 
 ## Software prerequisites
