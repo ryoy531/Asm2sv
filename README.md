@@ -233,12 +233,26 @@ $ ls asm2sv_*/rev_summary_*
 ```
 ####
 
-By the following command, they can be united to generate a genotype table. Directory named `combined_asm2sv` will be created.  
+By the following command, they can be united to generate a genotype table. A directory named `combined_asm2sv` will be created.  
 ```
 $ /path/to/Asm2sv unite -i list_for_batch_exec.csv -c chrname_info.tsv
 ```
 ####
 
+Dependent on the data summarizing policies, there are several output files.  
+- `A1`: Score approaches ‘0’ dependent on the degree of disruption regardless of indel.  
+- `A2`: Lower score (0 to 1) for deletion, larger score (>1) for insertion.  
+- `B1`: Output PAV scores for all genes (raw data including missing genotype).  
+- `B2`: Output PAV scores when structural variations were precisely determined by genomic alignments in all target assemblies (without missing genotype).  
+####
+
+For example, the following data files are based on different combination of `policy A1 / A2` and `B1 / B2`.  
+| file name | combination |
+| --------- | ----------- |
+| val_disrupt_q-4.csv | `A1` x `B1` |
+| val_disrupt_1cnsv_q-4.csv | `A1` x `B2` |
+| val_indel_q-4.csv | `A2` x `B1` |
+| val_indel_1cnsv_q-4.csv | `A2` x `B2` |
 
 
 
