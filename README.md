@@ -12,6 +12,7 @@ Recommend (genome size >500 Mb)
 - RAM: >256 GB
 
 *SSD raid disk is desirable to speed up analysis.  
+<br></br>
 
 ## Software prerequisites
 We have validated the Asm2sv pipeline with the following environment:  
@@ -39,6 +40,7 @@ We have validated the Asm2sv pipeline with the following environment:
 <sup>[*3]</sup> These can be installed with `miniconda3` in which `bioconda` and `conda-forge` channels are added.  
 <sup>[*4]</sup> These can be installed with `apt-get install` command.  
 <sup>[*5]</sup> Included in the bin directory.  
+<br></br>
 
 ## Installation
 Download zip or type the following git command:
@@ -50,9 +52,11 @@ By the following command, you can check whether all required programs are in you
 ```
 /path/to/Asm2sv check
 ```
+<br></br>
 
 ## Command options
 Asm2sv has multiple command options as follows. Detailed usage is described in the Tutorial section below.  
+
 ***
 - `gfftolist` produces a gene query list file based on reference Gff3 file. The output list file can be used in the `run` command.
 ```
@@ -82,6 +86,7 @@ Asm2sv has multiple command options as follows. Detailed usage is described in t
 /path/to/Asm2sv run -d [reference fasta] -g [reference Gff3] -q [list of target fasta (.csv or .txt)] -i [gene query list] -o [working directory] -t [CPU1] -f [flanking seq length] -n 5000
 ```
 <sup>`-f` specifies the length of flanking sequence that is shown in genomic alignment plot (.png image file) together with gene region.</sup>  
+<br></br>
 
 ## Tutorial
 Here, we would like to show the usages of command options based on tutorial dataset. Please obtain it via [Daizu-net](https://daizu-net.dna.affrc.go.jp/ap/top)
