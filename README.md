@@ -50,7 +50,7 @@ By the following command, you can check whether all required programs are in you
 /path/to/Asm2sv check
 ```
 
-## Commands
+## Command options
 Asm2sv has multiple command options as follows. Tutorial is also available (see below).
 - `gfftolist` produces a gene query list file based on reference Gff3 file. The output list file can be used in the `run` command.
 ```
@@ -61,16 +61,26 @@ Asm2sv has multiple command options as follows. Tutorial is also available (see 
 ```
 /path/to/Asm2sv run -d [reference fasta] -g [reference Gff3] -l [gene query list] -q [target fasta] -o [working directory] -t [CPU1] -x [CPU2] -n 5000
 ```
-<sup>`-t [CPU1]`: CPU threads used for genomic alignment analysis</sup>  
-<sup>`-x [CPU2]`: CPU threads used for gene prediction with genome threader</sup>  
-<sup>`-n 5000` means flanking 5000 bp is analyzed together with gene region (e.g. promoter and 3'-UTR region)</sup>  
+<sup>`-t` specifies CPU threads used for genomic alignment analysis.</sup>  
+<sup>`-x` specifies CPU threads used for gene prediction with genome threader.</sup>  
+<sup>`-n` specifies the length of promoter and 3'-UTR region for which SV scores will be calculated.</sup>  
 
 - `makecmd` produces a suite of command lines for multiple target genomes.
 ```
-/path/to/Asm2sv makecmd -i [target genome list (.csv)] -t [CPU1] -x [CPU2] -n 5000
+/path/to/Asm2sv makecmd -i [list of target genome (.csv)] -t [CPU1] -x [CPU2] -n 5000
 ```
-- unite
-- plot
+
+- `unite` combines results of multiple target genomes to compare genotype in a population scale.
+```
+/path/to/Asm2sv unite -i [list of target genome (.csv)] -c [information of chromosome ID alias (.tsv)]
+```
+
+- `plot` produces .png image file(s) that show genomic alignment of specified gene region including its flanking sequences.
+```
+/path/to/Asm2sv run -d [reference fasta] -g [reference Gff3] -q [list of target fasta (.csv or .txt)] -i [gene query list] -o [working directory] -t [CPU1] -f [flanking seq length] -n 5000
+```
+<sup>`-f` specifies the length of flanking sequence that is shown in genomic alignment plot (.png image file) together with gene region.</sup>  
+
 
 ## Tutorial
 Here, we would like to show the usages of command options based on tutorial dataset. Please obtain it via [Daizu-net](https://daizu-net.dna.affrc.go.jp/ap/top)
