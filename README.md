@@ -89,7 +89,7 @@ Asm2sv has multiple command options as follows. Detailed usage is described in t
 <br></br>
 
 ## Tutorial
-Here, we would like to show the usages of command options based on tutorial dataset. Please obtain it via [Daizu-net](https://daizu-net.dna.affrc.go.jp/ap/top)
+Basic usage of Asm2sv is described below. Please obtain tutorial dataset<sup>[#1]</sup> via [LINK](https://daizu-net.dna.affrc.go.jp/public/asm2sv_tutorial_data_20230215.zip)  
 
 
-The genome sequence data included in this tutorial originate from previously published data of other research groups. To use them as tutorial data, we have modified data to reduce file sizes. Please note that these files are different from the original ones.
+<sup>[#1] The genome sequence data included in this tutorial originate from previously published data of other research groups. We have modified them to reduce the file sizes. Please note that these files are different from the original ones.</sup>
