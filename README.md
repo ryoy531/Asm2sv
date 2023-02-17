@@ -247,12 +247,19 @@ Dependent on the data summarizing policies, there are several output files.
 ####
 
 For example, the following data files are based on different combination of `policy A1 / A2` and `B1 / B2`.  
-| file name | combination |
-| --------- | ----------- |
-| val_disrupt_q-4.csv | `A1` x `B1` |
-| val_disrupt_1cnsv_q-4.csv | `A1` x `B2` |
-| val_indel_q-4.csv | `A2` x `B1` |
-| val_indel_1cnsv_q-4.csv | `A2` x `B2` |
+| file name | combination | target | purpose |
+| --------- | ----------- | ------ | ------- |
+| val_disrupt_q-4.csv | `A1` x `B1` | gene region | rouhly evaluate disruption |
+| val_disrupt_1cnsv_q-4.csv | `A1` x `B2` | gene region | strictly compare disruption and pick up genes with PAV |
+| val_indel_q-4.csv | `A2` x `B1` | gene region | roughly evalute Indel |
+| val_indel_1cnsv_q-4.csv | `A2` x `B2` | gene region | strictly compare Indel, draw a clustering plot to analyze relationship |
+| promoter_indel_q-4.csv | `A2` x `B1` | promoter | roughly evalute Indel |
+| promoter_indel_1cnsv_q-4.csv | `A2` x `B2` | promoter | strictly compare Indel |
+| 3UTR_indel_q-4.csv | `A2` x `B1` | 3'-UTR | roughly evalute Indel |
+| 3UTR_indel_1cnsv_q-4.csv | `A2` x `B2` | 3'-UTR | strictly compare Indel |
+| prot_q-4.csv | `A2` x `B1` | protein | rouhly evaluate changes in sequence |
+| prot_1cnsv_q-4.csv | `A2` x `B2` | protein | strictly compare changes in sequence |
+
 
 
 
