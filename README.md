@@ -113,6 +113,7 @@ ___
 #### Step.1 Move to the directory `tutorial` then prepare a gene query list file from Gff.
 ```
 $ cd tutorial  
+$ unzip tutorial_****.zip  
 $ ls      #check files  
   chrname_info.tsv  
   list_for_batch_exec.csv  
