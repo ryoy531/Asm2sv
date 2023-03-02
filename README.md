@@ -279,6 +279,6 @@ For example, the following data files are based on different combination of `pol
 ####
 
 <h2 id="Citation"># Citation</h2>
-manuscript in preparation.  
+manuscript submitted.  
 
 
