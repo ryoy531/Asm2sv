@@ -627,8 +627,8 @@ if($q =~ /y/i || $q =~ /pipe/i){
 				my $tid = $AL->[0];
 				
 				my $tid_alt = $tid;
-				if($tid eq 'chr00'){
-					$tid_alt = "unanchored_scaffolds";
+				if($tid =~ /chr00/){
+					$tid_alt =~ s/chr00/unanchored_scaffolds/;
 				}
 				
 				if($hqtarget->{$tid}{seq}){
@@ -725,7 +725,7 @@ if($q =~ /y/i || $q =~ /pipe/i){
 				}
 				else{
 					print "! missing seq for [$tid] or [$tid_alt] ...\n";
-					$abhit_summary .= "$dir\t$dbpref\t$seqid\t$tpos0\t$tpos1\t$ab0\t$ab1\t$qpref\tmissing seq for [$tid]\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t$note\n";
+					$abhit_summary .= "$dir\t$dbpref\t$seqid\t$tpos0\t$tpos1\t$ab0\t$ab1\t$qpref\tmissing seq for [$tid] or [$tid_alt]\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t$note\n";
 				}
 			}
 		}
