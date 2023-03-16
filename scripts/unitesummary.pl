@@ -1572,6 +1572,9 @@ if(-e $file){
 			my $utr3 = $A[27];
 			my $id = $A[7];
 			
+			unless($A[32]){
+				next;
+			}
 			if($A[32] !~ /true/i){			# skip non-coding transcript
 				$hash->{geno_including_flanking}{$id}{$gid} = "false";
 				next;
