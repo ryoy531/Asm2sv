@@ -442,12 +442,12 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 				$num_nonzero5++;
 			}
 			
-			$hash->{sv}{$id}{$gid} = sprintf("%.3f", $hash->{sv}{$id}{$gid});
-			$hash->{sv2}{$id}{$gid} = sprintf("%.3f", $hash->{sv2}{$id}{$gid});
-			$hash->{raw}{$id}{$gid} = sprintf("%.3f", $hash->{raw}{$id}{$gid});
-			$hash->{svprot}{$id}{$gid} = sprintf("%.3f", $hash->{svprot}{$id}{$gid});
-			$hash->{svprom}{$id}{$gid} = sprintf("%.3f", $hash->{svprom}{$id}{$gid});
-			$hash->{svutr3}{$id}{$gid} = sprintf("%.3f", $hash->{svutr3}{$id}{$gid});
+			$hash->{sv}{$id}{$gid} = sprintf("%.4f", $hash->{sv}{$id}{$gid});
+			$hash->{sv2}{$id}{$gid} = sprintf("%.4f", $hash->{sv2}{$id}{$gid});
+			$hash->{raw}{$id}{$gid} = sprintf("%.4f", $hash->{raw}{$id}{$gid});
+			$hash->{svprot}{$id}{$gid} = sprintf("%.4f", $hash->{svprot}{$id}{$gid});
+			$hash->{svprom}{$id}{$gid} = sprintf("%.4f", $hash->{svprom}{$id}{$gid});
+			$hash->{svutr3}{$id}{$gid} = sprintf("%.4f", $hash->{svutr3}{$id}{$gid});
 			
 			push(@Geno1, $hash->{sv}{$id}{$gid});
 			push(@Geno1B, $hash->{sv2}{$id}{$gid});
