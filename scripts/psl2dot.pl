@@ -34,8 +34,6 @@ unless($script_log){
 }
 #--------------------------------------------------------------//
 
-#EST hintがオーバーラップする遺伝子や、元々は単一遺伝子であるはずがタンデムにスプリットされてアノテーションされた遺伝子を修正する。Search_confident_pep.pl の中で実行。
-
 # linkage map input (output of AnchorScaff_xxx.pl)
 # seqID	pos		marker_name		LG	cM
 # chr01	45230	T000100097l		1	0.2754932
