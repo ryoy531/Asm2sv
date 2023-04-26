@@ -146,7 +146,7 @@ ___
 #### Step.2 Run Asm2sv to compare reference and target genomes (an example of one-to-one comparison).  
 _*In case of comparing multiple target genomes, you may not need to perform this step. Please just read it._  
 ```
-$ /path/to/Asm2sv run -d reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference_genome.csv -q sample_genome_1.fasta -o asm2sv_genome_1 -t 16 -x 16 -n 5000  
+$ /path/to/Asm2sv run -r reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference_genome.csv -q sample_genome_1.fasta -o asm2sv_genome_1 -t 16 -x 16 -n 5000  
 ```
 ####
 
