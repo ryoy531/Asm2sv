@@ -6,6 +6,7 @@ use Cwd;
 use FindBin;
 
 my $bin_gth = shift;
+my $bin_miniprot = shift;
 my $bin_samtools = shift;
 my $bin_gffread = shift;
 my $bin_blat = shift;
@@ -21,7 +22,9 @@ my $tmp_qprot = shift;
 my $tmp_align = shift;
 my $tmpdir = shift;
 my $qpref = shift;
+my $qpos0 = shift;
 my $combined_qprot = shift;
+my $combined_qgff = shift;
 
 my $script_path = $FindBin::Bin;
 my $bin_FindCDS_mRNA = $script_path."/FindCDS_mRNA.pl";
@@ -32,6 +35,10 @@ if(! $bin_FindCDS_mRNA || ! -e $bin_FindCDS_mRNA){
 
 if(! $bin_gth || ! -e $bin_gth){
 	print "! missing gth...\n";
+	goto END;
+}
+if(! $bin_miniprot || ! -e $bin_miniprot){
+	print "! missing miniprot...\n";
 	goto END;
 }
 if(! $bin_samtools || ! -e $bin_samtools){
@@ -95,35 +102,206 @@ my $cmd = "";
 my $minIdentity = 95;
 if(-e $tmp_dbprot && -e $tmp_qfasta){
 	my $judge = 0;
+	
 	if(! -e $tmp_align){
-		print "! trying genome threader...\n";
-		my @CMD;
-		$CMD[0] = "$bin_gth -force -genomic $tmp_qfasta -protein $tmp_dbprot -gff3out -skipalignmentout -o $tmp_qgff > /dev/null 2>&1";
-		$CMD[1] = "$bin_gffread $tmp_qgff -g $tmp_qfasta -y $tmp_qprot";
+		my $AoHit = [];
 		
-		foreach my $cmd (@CMD){
+		print "\n! miniprot...\n";
+		my $method2 = "miniprot";
+		my @CMD2;
+		$CMD2[0] = "$bin_miniprot --gff $tmp_qfasta $tmp_dbprot > $tmp_qgff 2> /dev/null";
+		$CMD2[1] =  "$bin_gffread $tmp_qgff -g $tmp_qfasta -y $tmp_qprot";
+		
+		foreach my $cmd (@CMD2){
 			print "! cmd=[$cmd]\n";
 			system($cmd);
 		}
 		Rm_ifempty($tmp_qprot);
 		
-		my $cmd3 = "$bin_matcher -asequence $tmp_dbprot -bsequence $tmp_qprot -outfile $tmp_align";
 		if(-e $tmp_qprot){
-			print "! cmd=[$cmd3]\n";
-			system($cmd3);
-		}
-		if(-e $tmp_align){
-			my $hmatcher = Read_matcher($tmp_align);
-			if($hmatcher->{score} && $hmatcher->{score} ne '-'){
-				print "\n! ORF found in [$tmp_qfasta] with score=[$hmatcher->{score}]\n";
-				BindFasta($tmp_qprot, $combined_qprot, $gid, $qpref);
-				$judge = 1;
+			my $AoR = Revseq2array($tmp_qprot);
+			
+			my $num_seq = 0;
+			foreach my $rtmp (@{$AoR}){
+				$num_seq++;
+				print "! [$method2] [$num_seq] | start...\n";
+				
+				my $cand_fasta = $rtmp->[0];
+				my $split_status = $rtmp->[1];
+				SAVE($tmp_qprot, $cand_fasta);
+				
+				if(! -e $tmp_qprot){
+					next;
+				}
+				
+				Rm($tmp_qgff);
+				my @CMD2R;
+				$CMD2R[0] = "$bin_miniprot --gff $tmp_qfasta $tmp_qprot > $tmp_qgff 2> /dev/null";
+				$CMD2R[1] = "$bin_gffread $tmp_qgff -g $tmp_qfasta -y $tmp_qprot";
+				
+				print "! [$method2] [$num_seq] (each redo)\n";
+				foreach my $cmd (@CMD2R){
+					print "! cmd=[$cmd]\n";
+					system($cmd);
+				}
+				
+				my $num_eachseq = 0;
+				if(-e $tmp_qprot){
+					$num_eachseq = CheckFasta($tmp_qprot);
+				}
+				if($num_eachseq == 0){
+					print "! [$method2] [$num_seq] | no sequence in the file, skip...\n";
+					Rm($tmp_qprot);
+					next;
+				}
+				
+				my $cmd1 = "$bin_matcher -asequence $tmp_dbprot -bsequence $tmp_qprot -outfile $tmp_align";
+				print "! [$method2] [$num_seq] | cmd=[$cmd1]\n";
+				system($cmd1);
+				
+				if(-e $tmp_align){
+					my $hmatcher = Read_matcher($tmp_align);
+					if($hmatcher->{score} && $hmatcher->{score} ne '-'){
+						my $hitseq = PickupFasta($tmp_qprot, $gid, $qpref, $method2);
+						
+						my ($gff_lines, $gff_native) = ReadGff($tmp_qgff, $gid, $qpref, $hitseq->[0], $hitseq->[5], $method2, $qpos0);
+						$hitseq->[0] = $qpref."_".$gid."_".$method2.".t1";
+#						ADD("_gff_native.gff", $gff_native);
+						
+						my @tmp;
+						push(@tmp, $hitseq->[0]);		# revID
+						push(@tmp, $hitseq->[1]);		# seq
+						push(@tmp, $method2);
+						push(@tmp, $hmatcher->{score} * $hitseq->[2]);
+						push(@tmp, $hmatcher->{native});
+						push(@tmp, $gff_lines);
+						push(@{$AoHit}, \@tmp);
+						
+						print "! [$method2] [$num_seq] | [$hitseq->[0]] score=[$hmatcher->{score}]\n";
+					}
+				}
+				
+#				Rm($tmp_qprot);
+				Rm($tmp_align);
 			}
+		}
+		
+		if(@{$AoHit}){
+			@{$AoHit} = sort {$b->[3] <=> $a->[3]} @{$AoHit};
+			my $tophit = $AoHit->[0];
+			
+			print "! tophit = [$tophit->[0]] [$tophit->[2]]\n";
+			my $tophit_fasta = ">".$tophit->[0]."\n".$tophit->[1]."\n";
+			SAVE($tmp_qprot, $tophit_fasta);
+			SAVE($tmp_align, $tophit->[4]);
+			
+			BindFasta($combined_qprot, $qpref, $gid, $tophit->[0], $tophit->[1], $tophit->[2]);
+			BindGff($combined_qgff, $tophit->[5]);
+			$judge = 1;
 		}
 	}
 	
 	if($judge eq '0'){
 		Rm($tmp_align);
+		my $AoHit = [];
+		
+		print "\n! trying genome threader...\n";
+		my @CMD1;
+		$CMD1[0] = "$bin_gth -force -genomic $tmp_qfasta -protein $tmp_dbprot -gff3out -skipalignmentout -o $tmp_qgff > /dev/null 2>&1";
+		$CMD1[1] = "$bin_gffread $tmp_qgff -g $tmp_qfasta -y $tmp_qprot";
+		my $method1 = "gth";
+		
+		foreach my $cmd (@CMD1){
+			print "! cmd=[$cmd]\n";
+			system($cmd);
+		}
+		Rm_ifempty($tmp_qprot);
+		
+		if(-e $tmp_qprot){
+			my $AoR = Revseq2array($tmp_qprot);
+			
+			my $num_seq = 0;
+			foreach my $rtmp (@{$AoR}){
+				$num_seq++;
+				print "! [$method1] [$num_seq] | start...\n";
+				
+				my $cand_fasta = $rtmp->[0];
+				my $split_status = $rtmp->[1];
+				SAVE($tmp_qprot, $cand_fasta);
+				
+				if(! -e $tmp_qprot){
+					next;
+				}
+				
+				Rm($tmp_qgff);
+				my @CMD2R;
+				$CMD2R[0] = "$bin_gth -force -genomic $tmp_qfasta -protein $tmp_qprot -gff3out -skipalignmentout -o $tmp_qgff > /dev/null 2>&1";
+				$CMD2R[1] = "$bin_gffread $tmp_qgff -g $tmp_qfasta -y $tmp_qprot";
+				
+				print "! [$method1] [$num_seq] (each redo)\n";
+				foreach my $cmd (@CMD2R){
+					print "! cmd=[$cmd]\n";
+					system($cmd);
+				}
+				
+				my $num_eachseq = 0;
+				if(-e $tmp_qprot){
+					$num_eachseq = CheckFasta($tmp_qprot);
+				}
+				if($num_eachseq == 0){
+					print "! [$method1] [$num_seq] | no sequence in the file, skip...\n";
+					Rm($tmp_qprot);
+					next;
+				}
+				
+				my $cmd1 = "$bin_matcher -asequence $tmp_dbprot -bsequence $tmp_qprot -outfile $tmp_align";
+				print "! [$method1] [$num_seq] | cmd=[$cmd1]\n";
+				system($cmd1);
+				
+				if(-e $tmp_align){
+					my $hmatcher = Read_matcher($tmp_align);
+					if($hmatcher->{score} && $hmatcher->{score} ne '-'){
+						my $hitseq = PickupFasta($tmp_qprot, $gid, $qpref, $method1);
+						
+						my ($gff_lines, $gff_native) = ReadGff($tmp_qgff, $gid, $qpref, $hitseq->[0], $hitseq->[5], $method1, $qpos0);
+						$hitseq->[0] = $qpref."_".$gid."_".$method1.".t1";
+						
+						my @tmp;
+						push(@tmp, $hitseq->[0]);		# revID
+						push(@tmp, $hitseq->[1]);		# seq
+						push(@tmp, $method1);
+						push(@tmp, $hmatcher->{score} * $hitseq->[2]);
+						push(@tmp, $hmatcher->{native});
+						push(@tmp, $gff_lines);
+						push(@{$AoHit}, \@tmp);
+						
+						print "! [$method1] [$num_seq] | [$hitseq->[0]] score=[$hmatcher->{score}]\n";
+					}
+				}
+				
+#				Rm($tmp_qprot);
+				Rm($tmp_align);
+			}
+		}
+		
+		if(@{$AoHit}){
+			@{$AoHit} = sort {$b->[3] <=> $a->[3]} @{$AoHit};
+			my $tophit = $AoHit->[0];
+			
+			print "! tophit = [$tophit->[0]] [$tophit->[2]]\n";
+			my $tophit_fasta = ">".$tophit->[0]."\n".$tophit->[1]."\n";
+			SAVE($tmp_qprot, $tophit_fasta);
+			SAVE($tmp_align, $tophit->[4]);
+			
+			BindFasta($combined_qprot, $qpref, $gid, $tophit->[0], $tophit->[1], $tophit->[2]);
+			BindGff($combined_qgff, $tophit->[5]);
+			$judge = 1;
+		}
+	}
+	
+	if($judge eq '0'){
+		Rm($tmp_align);
+		my $AoHit = [];
 		
 		print "\n! trying blat...\n";
 		my $psl_transcript = "$tmpdir/_qtranscript_".$gid.".psl";
@@ -131,6 +309,7 @@ if(-e $tmp_dbprot && -e $tmp_qfasta){
 		my $egff_transcript = "$tmpdir/_qtranscript_".$gid.".E.gff";
 		my $eprot_transcript = "$tmpdir/_qtranscript_".$gid.".E.fasta";
 		my $prefix = $gid.".E.transcript";
+		my $method3 = "manual";
 		
 		Rm($egtf_transcript);
 		Rm($egff_transcript);
@@ -138,6 +317,7 @@ if(-e $tmp_dbprot && -e $tmp_qfasta){
 		my @CMD1;
 		$CMD1[0] = "$bin_blat -t=dna -q=rna -noHead -minIdentity=$minIdentity -maxIntron=10000 -minScore=30 $tmp_qfasta $tmp_dbtranscript $psl_transcript";
 		$CMD1[1] = "$bin_blat2hint --in=$psl_transcript --out=$egtf_transcript --ep_cutoff=0";
+		
 		foreach my $cmd (@CMD1){
 			print "! cmd=[$cmd]\n";
 			system($cmd);
@@ -148,8 +328,7 @@ if(-e $tmp_dbprot && -e $tmp_qfasta){
 			Add_feature_info($egtf_transcript, $strand, $egff_transcript);
 			
 			my @CMD2;
-			$CMD2[0] = "$bin_samtools faidx $tmp_qfasta";
-			$CMD2[1] = "$bin_gffread $egff_transcript -g $tmp_qfasta -w $eprot_transcript";
+			$CMD2[0] = "$bin_gffread $egff_transcript -g $tmp_qfasta -w $eprot_transcript";
 			foreach my $cmd (@CMD2){
 				print "! cmd=[$cmd]\n";
 				system($cmd);
@@ -159,26 +338,63 @@ if(-e $tmp_dbprot && -e $tmp_qfasta){
 			my $hseq = $rh->{data};
 			my @SeqID = keys(%{$hseq});
 			@SeqID = sort {$a cmp $b} @SeqID;
+			
 			foreach my $sid (@SeqID){
 				my $cmd = "perl $bin_FindCDS_mRNA $hseq->{$sid}{seq} $prefix > $tmp_qprot";
 	#			print "! cmd=[$cmd]\n";
 				system($cmd);
 				
 				if(-e $tmp_qprot){
-					my $cmd3 = "$bin_matcher -asequence $tmp_dbprot -bsequence $tmp_qprot -outfile $tmp_align";
-					if(-e $tmp_qprot){
-						print "! cmd=[$cmd3]\n";
-						system($cmd3);
-					}
-					if(-e $tmp_align){
-						my $hmatcher = Read_matcher($tmp_align);
-						if($hmatcher->{score} && $hmatcher->{score} ne '-'){
-							print "\n! ORF found in [$tmp_qfasta] with score=[$hmatcher->{score}]\n";
-							BindFasta($tmp_qprot, $combined_qprot, $gid, $qpref);
-							last;
+					my $AoR = Revseq2array($tmp_qprot);
+					
+					my $num_seq = 0;
+					foreach my $rtmp (@{$AoR}){
+						my $cand_fasta = $rtmp->[0];
+						my $split_status = $rtmp->[1];
+						SAVE($tmp_qprot, $cand_fasta);
+						
+						if(! -e $tmp_qprot){
+							next;
 						}
+						$num_seq++;
+						
+						my $cmd1 = "$bin_matcher -asequence $tmp_dbprot -bsequence $tmp_qprot -outfile $tmp_align";
+						print "! [$method3] [$num_seq] | cmd=[$cmd1]\n";
+						system($cmd1);
+						
+						if(-e $tmp_align){
+							my $hmatcher = Read_matcher($tmp_align);
+							if($hmatcher->{score} && $hmatcher->{score} ne '-'){
+								my $hitseq = PickupFasta($tmp_qprot, $gid, $qpref, $method3);
+								
+								my @tmp;
+								push(@tmp, $hitseq->[0]);		# revID
+								push(@tmp, $hitseq->[1]);		# seq
+								push(@tmp, $method3);
+								push(@tmp, $hmatcher->{score} * $hitseq->[2]);
+								push(@tmp, $hmatcher->{native});
+								push(@{$AoHit}, \@tmp);
+								
+								print "! [$method3] [$num_seq] | [$hitseq->[0]] score=[$hmatcher->{score}]\n";
+							}
+						}
+						
+						Rm($tmp_qprot);
+						Rm($tmp_align);
 					}
 				}
+			}
+			
+			if(@{$AoHit}){
+				@{$AoHit} = sort {$b->[3] <=> $a->[3]} @{$AoHit};
+				my $tophit = $AoHit->[0];
+				
+				print "! tophit = [$tophit->[0]] [$tophit->[2]]\n";
+				my $tophit_fasta = ">".$tophit->[0]."\n".$tophit->[1]."\n";
+				SAVE($tmp_qprot, $tophit_fasta);
+				SAVE($tmp_align, $tophit->[4]);
+				
+				BindFasta($combined_qprot, $qpref, $gid, $tophit->[0], $tophit->[1], $tophit->[2]);
 			}
 		}
 	}
@@ -233,20 +449,59 @@ return $judge;
 
 
 #-------------------------------------------------------------------------------
-sub BindFasta{
-my ($tmp_qprot, $combined_qprot, $gid, $qpref) = @_;
+sub Revseq2array{
+my $tmp_qprot = shift;
 
 open(my $fh, "<", $tmp_qprot);
 my $ID;
 my $seq;
-my $r;
+my $AoR = [];
 while(my $line = <$fh>){
 	$line =~ s/\n//;
 	$line =~ s/\r//;
 	
 	if($line =~ /\>/){
 		if($seq){
-			$r .= ">".$qpref."_".$gid."_".$ID."\n".$seq."\n";
+			my $native_seq = $seq;
+			$seq =~ s/\./*/g;
+			my @tmp = split(/\*/, $seq);
+			$seq = $tmp[0];
+			
+			my $status = 0;
+			if($tmp[1]){
+				$status = 1;
+			}
+			
+			my @CHAR = split(//, $seq);
+			if($CHAR[0] ne 'M'){
+				$status = 1;
+				my @SPM = split(/M/, $seq);
+				
+				if($SPM[0]){
+					shift(@SPM);
+					my $num_SPM = @SPM;
+					for(my $i = 0; $i < $num_SPM; $i++){
+						my @eachSPM;
+						for(my $j = $i; $j < $num_SPM; $j++){
+							push(@eachSPM, $SPM[$j]);
+						}
+						my $each_tmpseq = "M".join("M", @eachSPM);
+						
+						my $r = ">".$ID."\n".$each_tmpseq."\n";
+						my @rtmp;
+						push(@rtmp, $r);
+						push(@rtmp, $status);
+						push(@{$AoR}, \@rtmp);
+					}
+				}
+			}
+			else{
+				my $r = ">".$ID."\n".$seq."\n";
+				my @rtmp;
+				push(@rtmp, $r);
+				push(@rtmp, $status);
+				push(@{$AoR}, \@rtmp);
+			}
 		}
 		
 		$ID = $line;
@@ -262,8 +517,170 @@ while(my $line = <$fh>){
 close $fh;
 
 if($seq){
-	$r .= ">".$qpref."_".$gid."_".$ID."\n".$seq."\n";
+	my $native_seq = $seq;
+	$seq =~ s/\./*/g;
+	my @tmp = split(/\*/, $seq);
+	$seq = $tmp[0];
+	
+	my $status = 0;
+	if($tmp[1]){
+		$status = 1;
+	}
+	
+	my @CHAR = split(//, $seq);
+	if($CHAR[0] ne 'M'){
+		$status = 1;
+		my @SPM = split(/M/, $seq);
+		
+		if($SPM[0]){
+			shift(@SPM);
+			my $num_SPM = @SPM;
+			for(my $i = 0; $i < $num_SPM; $i++){
+				my @eachSPM;
+				for(my $j = $i; $j < $num_SPM; $j++){
+					push(@eachSPM, $SPM[$j]);
+				}
+				my $each_tmpseq = "M".join("M", @eachSPM);
+				
+				my $r = ">".$ID."\n".$each_tmpseq."\n";
+				my @rtmp;
+				push(@rtmp, $r);
+				push(@rtmp, $status);
+				push(@{$AoR}, \@rtmp);
+			}
+		}
+	}
+	else{
+		my $r = ">".$ID."\n".$seq."\n";
+		my @rtmp;
+		push(@rtmp, $r);
+		push(@rtmp, $status);
+		push(@{$AoR}, \@rtmp);
+	}
 }
+
+return $AoR;
+}
+
+
+#-------------------------------------------------------------------------------
+sub CheckFasta{
+my $tmp_qprot = shift;
+
+open(my $fh, "<", $tmp_qprot);
+my $ID;
+my $seq;
+my $num_seq = 0;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	if($line =~ /\>/){
+		if($seq){
+			$num_seq++;
+		}
+		
+		$ID = $line;
+		$ID =~ s/\>//;
+		my @tmp = split(/\s/, $ID);
+		$ID = $tmp[0];
+		$seq = "";
+	}
+	else{
+		$seq .= $line;
+	}
+}
+close $fh;
+
+if($seq){
+	$num_seq++;
+}
+
+return $num_seq;
+}
+
+
+#-------------------------------------------------------------------------------
+sub PickupFasta{
+my ($tmp_qprot, $gid, $qpref, $method) = @_;
+
+open(my $fh, "<", $tmp_qprot);
+my $ID;
+my $seq;
+my $AoR = [];
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	if($line =~ /\>/){
+		if($seq){
+			my @CHAR = split(//, $seq);
+			my $aa_1st = $CHAR[0];
+			my $len = length($seq);
+			my $revID = $qpref."_".$gid."_".$ID."_".$method;
+#			my $revID = $ID;
+			
+			my $score = $len;
+			if($aa_1st && $aa_1st =~ /M/i){
+				$score *= 1000000000;
+			}
+			
+			my @tmp;
+			push(@tmp, $revID);
+			push(@tmp, $seq);
+			push(@tmp, $score);
+			push(@tmp, $len);
+			push(@tmp, $aa_1st);
+			push(@tmp, $ID);
+			push(@{$AoR}, \@tmp);
+		}
+		
+		$ID = $line;
+		$ID =~ s/\>//;
+		my @tmp = split(/\s/, $ID);
+		$ID = $tmp[0];
+		$seq = "";
+	}
+	else{
+		$seq .= $line;
+	}
+}
+close $fh;
+
+if($seq){
+	my @CHAR = split(//, $seq);
+	my $aa_1st = $CHAR[0];
+	my $len = length($seq);
+	my $revID = $qpref."_".$gid."_".$ID."_".$method;
+#	my $revID = $ID;
+	
+	my $score = $len;
+	if($aa_1st && $aa_1st =~ /M/i){
+		$score *= 1000000000;
+	}
+	
+	my @tmp;
+	push(@tmp, $revID);
+	push(@tmp, $seq);
+	push(@tmp, $score);
+	push(@tmp, $len);
+	push(@tmp, $aa_1st);
+	push(@tmp, $ID);
+	push(@{$AoR}, \@tmp);
+}
+
+@{$AoR} = sort {$b->[2] <=> $a->[2]} @{$AoR};
+
+return $AoR->[0];		# return only tophit
+}
+
+
+#-------------------------------------------------------------------------------
+sub BindFasta{
+my ($combined_qprot, $qpref, $gid, $ID, $seq, $method) = @_;
+
+#my $r = ">".$qpref."_".$gid."_".$ID."_".$method."\n".$seq."\n";
+my $r = ">".$ID."\n".$seq."\n";
 
 open(my $rfh, ">>", $combined_qprot);
 print $rfh $r;
@@ -273,14 +690,196 @@ close $rfh;
 
 
 #-------------------------------------------------------------------------------
+sub BindGff{
+my ($combined_qgff, $lines) = @_;
+
+open(my $rfh, ">>", $combined_qgff);
+print $rfh $lines;
+close $rfh;
+
+}
+
+
+#-------------------------------------------------------------------------------
+sub ReadGff{
+my $file = shift;
+my $gid = shift;		# e.g. GlymaJER.01G057564.1
+my $qpref = shift;		# e.g. Gmax_508_v4.0
+my $revID = shift;		# e.g. Gmax_508_v4.0_GlymaJER.01G057564.1_mRNA1_gth
+my $ID = shift;
+my $method = shift;		# e.g. gth
+my $qpos0 = shift;
+
+my $tmp_prefix1 = $qpref."_".$gid."_";
+my $tmp_prefix2 = "_".$method;
+my $tidx = $revID;
+$tidx =~ s/$tmp_prefix1//;			# e.g. mRNA1_gth
+$tidx =~ s/$tmp_prefix2//;			# e.g. mRNA1
+
+my $rev_gid = $qpref."_".$gid."_".$method;
+my $rev_tid = $rev_gid.".t1";
+
+open(my $fh, "<", $file);
+my $hash = {};
+my $CDS = [];
+my $Exon = [];
+my $Other = [];
+my $strand = "";
+my $native = "# ".$revID." | ".$ID."\n";
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+#	Gm01	gth	gene	3	3433	.	+	.	ID=gene1
+#	Gm01	gth	mRNA	3	3433	.	+	.	ID=mRNA1;Parent=gene1;Target=GlymaJER.01G057564.1.t1 2 1068 +
+#	Gm01	gth	exon	3	121	1	+	.	Parent=mRNA1
+#	Gm01	gth	five_prime_cis_splice_site	122	123	0.05	+	.	Parent=mRNA1
+#	Gm01	gth	three_prime_cis_splice_site	250	251	0.05	+	.	Parent=mRNA1
+#	Gm01	gth	exon	252	2967	0.998	+	.	Parent=mRNA1
+#	Gm01	gth	CDS	1565	2967	.	+	0	ID=CDS1;Parent=mRNA1
+#	Gm01	gth	five_prime_cis_splice_site	2968	2969	0.05	+	.	Parent=mRNA1
+#	Gm01	gth	three_prime_cis_splice_site	3068	3069	0.05	+	.	Parent=mRNA1
+#	Gm01	gth	exon	3070	3433	1	+	.	Parent=mRNA1
+#	Gm01	gth	CDS	3070	3433	.	+	1	ID=CDS1;Parent=mRNA1
+	
+	if($line){
+		$native .= $line."\n";
+		
+		my @CHAR = split(//, $line);
+		my @A = split(/\t/, $line);
+		if($A[8] && $CHAR[0] !~ /\#/){
+			my @tag = split(/\;/, $A[8]);
+			
+			$A[3] += $qpos0 - 1;
+			$A[4] += $qpos0 - 1;
+			
+			if($A[2] eq 'gene'){
+				$A[8] = "ID=".$rev_gid;
+				$hash->{gene} = join("\t", @A)."\n";
+				$strand = $A[6];
+			}
+			elsif($A[2] eq 'mRNA' || $A[2] eq 'transcript'){
+				my $tid;
+				foreach my $val (@tag){
+					if($val =~ /ID\=/){
+						$tid = $val;
+						$tid =~ s/ID\=//;
+						last;
+					}
+				}
+				if(! $tid || $tid ne $tidx){
+					next;
+				}
+				
+				$A[2] = "transcript";
+				$A[8] = "ID=".$rev_tid."\;Parent=".$rev_gid;
+				if($tag[2] =~ /Target\=/){
+					$A[8] .= $tag[2];
+				}
+				$hash->{transcript} = join("\t", @A)."\n";
+				
+				$A[2] = "gene";
+				$A[8] = "ID=".$rev_gid;
+				$hash->{gene_sub} = join("\t", @A)."\n";
+			}
+			else{
+				my $tid;
+				foreach my $val (@tag){
+					if($val =~ /Parent\=/){
+						$tid = $val;
+						$tid =~ s/Parent\=//;
+						last;
+					}
+				}
+				if(! $tid || $tid ne $tidx){
+					next;
+				}
+				
+				if($A[2] eq 'CDS'){
+					push(@{$CDS}, \@A);
+				}
+				elsif($A[2] eq 'exon'){
+					push(@{$Exon}, \@A);
+				}
+				else{
+					push(@{$Other}, \@A);
+				}
+			}
+		}
+	}
+}
+close $fh;
+
+if($strand eq '+'){
+	@{$CDS} = sort {$a->[3] <=> $b->[3]} @{$CDS};
+	@{$Exon} = sort {$a->[3] <=> $b->[3]} @{$Exon};
+	@{$Other} = sort {$a->[3] <=> $b->[3]} @{$Other};
+}
+else{
+	@{$CDS} = sort {$b->[3] <=> $a->[3]} @{$CDS};
+	@{$Exon} = sort {$b->[3] <=> $a->[3]} @{$Exon};
+	@{$Other} = sort {$b->[3] <=> $a->[3]} @{$Other};
+}
+
+my $num_CDS = @{$CDS};
+my $num_exon = @{$Exon};
+my $num_other = @{$Other};
+
+my $AoA = [];
+for(my $i = 0; $i < $num_CDS; $i++){
+	my $j = $i + 1;
+	my $A = $CDS->[$i];
+	$A->[8] = "ID=".$rev_tid.".CDS".$j."\;Parent=".$rev_tid;
+	push(@{$AoA}, $A);
+}
+for(my $i = 0; $i < $num_exon; $i++){
+	my $j = $i + 1;
+	my $A = $Exon->[$i];
+	$A->[8] = "ID=".$rev_tid.".exon".$j."\;Parent=".$rev_tid;
+	push(@{$AoA}, $A);
+}
+for(my $i = 0; $i < $num_other; $i++){
+	my $A = $Other->[$i];
+	$A->[8] = "Parent=".$rev_tid;
+	push(@{$AoA}, $A);
+}
+
+@{$AoA} = sort {$a->[3] <=> $b->[3]} @{$AoA};
+
+if(! $hash->{gene}){
+	$hash->{gene} = $hash->{gene_sub};
+}
+
+my $rgff = $hash->{gene}.$hash->{transcript};
+foreach my $A (@{$AoA}){
+	$rgff .= join("\t", @{$A})."\n";
+}
+
+$native .= "-------selected-------\n";
+$native .= $rgff;
+$native .= "-------selected-------\n\n";
+
+return ($rgff, $native);
+}
+
+
+#-------------------------------------------------------------------------------
 sub Read_matcher{
 my $file = shift;
 
 open(my $fh, "<", $file);
 my $hash = {};
+my $native;
 while(my $line = <$fh>){
 	$line =~ s/\n//;
 	$line =~ s/\r//;
+	
+	if($line){
+		$native .= $line."\n";
+	}
+	else{
+		$native .= "\n";
+	}
 	
 	# Aligned_sequences: 2
 	# 1: MELO.jh000002.1.t1
@@ -381,6 +980,8 @@ while(my $line = <$fh>){
 	}
 }
 close $fh;
+
+$hash->{native} = $native;
 
 return $hash;
 }
@@ -676,6 +1277,38 @@ print $rfh $r;
 close $rfh;
 
 return $strand;
+}
+
+
+#----------------------------------------------------------
+sub SAVE{
+my $file = shift;
+my $str = shift;
+
+if($str){
+	open(my $fh, ">", $file) or die;
+	print $fh $str;
+	close $fh;
+	print "! output [$file]\n";
+}
+else{
+	print "! missing string to save [$file]...\n";
+}
+
+}
+
+
+#----------------------------------------------------------
+sub ADD{
+my $file = shift;
+my $str = shift;
+
+if($str){
+	open(my $fh, ">>", $file) or die;
+	print $fh $str;
+	close $fh;
+}
+
 }
 
 
