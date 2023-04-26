@@ -59,12 +59,13 @@ my $neighbor_tlen;
 my $cpu;
 my $cpu_gth;
 my $initspan;
+my $redo_examine;
 my $skip_orfsearch;
 my $cluster;
 my $help;
 my $test;
 
-GetOptions('--db=s' => \$dbfasta, '--gff=s' => \$dbgff, '--list=s' => \$genelist, '--query=s' => \$qfasta, '--alignpsl=s' => \$qpsl, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--cpu=i' => \$cpu, '--xthread=i' => \$cpu_gth, '--span=i' => \$initspan, '--plot' => \$outplot, '--test' => \$test, '--1' => \$cluster, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
+GetOptions('--db=s' => \$dbfasta, '--gff=s' => \$dbgff, '--list=s' => \$genelist, '--query=s' => \$qfasta, '--alignpsl=s' => \$qpsl, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--cpu=i' => \$cpu, '--xthread=i' => \$cpu_gth, '--span=i' => \$initspan, '--plot' => \$outplot, '--test' => \$test, '--1' => \$cluster, '--5' => \$redo_examine, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
 
 if($cluster){
 	$host = "cluster1";
@@ -94,6 +95,9 @@ elsif(! -e $qfasta){
 if($status eq 'missing'){
 	print "\n$help_command";
 	goto END;
+}
+if($redo_examine){
+	$skip_orfsearch = 0;
 }
 
 if(! $qpsl || ! -e $qpsl){
@@ -161,6 +165,7 @@ push(@APP, "gth");
 push(@APP, "blat");
 push(@APP, "blat2hints");
 push(@APP, "matcher");
+push(@APP, "miniprot");
 
 my $hbin = {};
 foreach my $app (@APP){
@@ -233,6 +238,12 @@ my $combined_final = "summary_genome2sv_".$dir."_combined.tsv";
 my $rfile_final = "summary_genome2sv_".$dir."_".$qpref.".tsv";
 my $afile = "./$qpref/specified_region_hits_".$qpref.".tsv";
 my $catafile = "specified_region_hits.tsv";
+my $redo_log = "_redo_examine.log";
+
+if($redo_examine && -e $redo_log){
+	print "! --5 is invoked, but analysis appears to be already done. skip...\n";
+	goto END;
+}
 
 my $hdbseq = Open_fasta_as_hash($dbfasta);
 my $HGFF = Gff_to_hash($dbgff);
@@ -339,11 +350,7 @@ else{
 					push(@gabbage, $qfasta_tmp);
 				}
 				
-				my $hist = "hist.txt";
-				my $identifer = $qpref."_".$dbfasta."_".$sid."_".$region."_".$specified;
-				my $acheck = Check_previous($hist, $identifer);
-				
-				if($acheck eq 'false'){
+				if(! $hpreva->{$gid}){
 #					print "$bin_tigplot3 -o $qpref -d $dbfasta_tmp -q $qfasta_tmp --scale bp -I $sid -r $region -t $specified -m 95 --note $gid >> $log_pav\n";
 					if($outplot){
 						$cmd .= "$bin_tigplot3 -o $qpref -d $dbfasta_tmp -q $qfasta_tmp --scale bp -I $sid -r $region -t $specified -m 95 --note $gid --neighbor $neighbor_tlen --plot --neighbor $neighbor_tlen --strand $hgff->{$gid}{strand} >> $log_pav 2>&1\n";
@@ -360,8 +367,7 @@ else{
 #							$cmd .= " --skip_alignmethod";
 #						}
 						$cmd .= " >> $log_pav 2>&1\n";
-						
-						$cmd .= "echo \'$identifer\' >> hist.txt\n";
+#						$cmd .= "echo \'$gid\' >> hist.txt\n";
 						$cmd .= "sleep 1\n";
 					}
 				}
@@ -574,12 +580,17 @@ elsif(-e $afile){
 	my $hdbtranscript = Open_fasta_as_hash($dbtranscript);
 	my $hdbcds = Open_fasta_as_hash($dbcds);
 	
-	print "! preparing dataset for genome threader... (may take a while)\n";
+	print "! preparing dataset for ORF search... (may take a while)\n";
 	my $hprevr = {};
 	my @Gnotyet;
 	my $numQL_Gnotyet = @G;
 	my $num_prevorf = 0;
-	if(-e $rfile_final){
+	if($redo_examine && -e $rfile_final){
+		print "! --5 is invoked, once remove [$rfile_final]\n";
+		system("rm $rfile_final");
+		@Gnotyet = @G;
+	}
+	elsif(-e $rfile_final){
 		print "! found previous result [$rfile_final]\n";
 		my $hcheckorf = Check_prev_orfsearch($rfile_final);
 		$hprevr = $hcheckorf->{hash};
@@ -604,12 +615,13 @@ elsif(-e $afile){
 		system("rm $tmp_ralign");
 	}
 	
-	my $log_gth_hist = "log_gth_processed.txt";
-	if(-e $log_gth_hist){
-		system("rm $log_gth_hist");
+	my $log_orfsearch_hist = "log_orfsearch_processed.txt";
+	if(-e $log_orfsearch_hist){
+		system("rm $log_orfsearch_hist");
 	}
 	
 	my $combined_qprot = "predicted_".$qpref.".fasta";
+	my $combined_qgff = "predicted_".$qpref.".gff";
 	
 	my $tmpdir_sw = 0;
 #	if(-e "/media/nvmer/tmp"){
@@ -639,8 +651,8 @@ elsif(-e $afile){
 			my $cmd;
 			my $cnt = 0;
 			my $cnt_skip = 0;
-			my $log_gth = "thread_gth_".$i.".log";
-			my $script = "cmd_gth_".$qpref."_".$i.".sh";
+			my $log_orfsearch = "thread_orfsearch_".$i.".log";
+			my $script = "cmd_orfsearch_".$qpref."_".$i.".sh";
 			for(my $j = $n0; $j < $n1; $j++){
 				if($Gnotyet[$j]){
 					my $gid = $Gnotyet[$j];
@@ -704,46 +716,12 @@ elsif(-e $afile){
 								my $len_sub_qseq = length($sub_qseq);
 								
 	#							$cmd .= "if test -e \"$mk_process\"; then\n";
-	#							$cmd .= "\techo '$gid already processed' >> $log_gth 2>&1\n";
+	#							$cmd .= "\techo '$gid already processed' >> $log_orfsearch 2>&1\n";
 	#							$cmd .= "fi\n";
 								
 	#							if($sub_qseq && -e $tmp_dbprot && -e $tmp_qfasta){
 								if(-e $tmp_dbprot && -e $tmp_qfasta){
-									if(-e $bin_findorf){
-										$cmd .= "perl $bin_findorf $hbinpath->{gth} $hbinpath->{samtools} $hbinpath->{gffread} $hbinpath->{blat} $hbinpath->{blat2hints} $hbinpath->{matcher} $gid $tmp_dbprot $tmp_dbtranscript $tmp_dbcds $tmp_qfasta $tmp_qgff $tmp_qprot $tmp_align $tmpdir $qpref $combined_qprot >> $log_gth 2>&1\n";
-									}
-									else{
-										$cmd .= "if test ! -e \"$tmp_qgff\"; then\n";
-										$cmd .= "\tif test -e \"$tmp_qfasta\"; then\n";
-										$cmd .= "\t\t$hbinpath->{gth} -genomic $tmp_qfasta -protein $tmp_dbprot -gff3out -skipalignmentout -o $tmp_qgff >> $log_gth 2>&1\n";
-										$cmd .= "\t\t$hbinpath->{samtools} faidx $tmp_qfasta >> $log_gth 2>&1\n";
-										$cmd .= "\t\t$hbinpath->{gffread} $tmp_qgff -g $tmp_qfasta -y $tmp_qprot >> $log_gth 2>&1\n";
-										$cmd .= "\t\t$hbinpath->{matcher} -asequence $tmp_dbprot -bsequence $tmp_qprot -outfile $tmp_align >> $log_gth 2>&1\n";
-										
-										$cmd .= "\t\tif test -e \"$tmp_dbprot\"; then\n";
-										$cmd .= "\t\t\trm $tmp_dbprot\n";
-										$cmd .= "\t\tfi\n";
-										$cmd .= "\t\tif test -e \"$tmp_dbprot.md5\"; then\n";
-										$cmd .= "\t\t\trm $tmp_dbprot.md5\n";
-										$cmd .= "\t\tfi\n";
-										$cmd .= "\t\tif test -e \"$tmp_dbprot.suf\"; then\n";
-										$cmd .= "\t\t\trm $tmp_dbprot.\*\n";
-										$cmd .= "\t\tfi\n";
-										$cmd .= "\t\tif test -e \"$tmp_dbindex.bck\"; then\n";
-										$cmd .= "\t\t\trm $tmp_dbindex.\*\n";
-										$cmd .= "\t\tfi\n";
-										$cmd .= "\t\tif test -e \"$tmp_qfasta\"; then\n";
-										$cmd .= "\t\t\trm $tmp_qfasta\n";
-										$cmd .= "\t\tfi\n";
-										$cmd .= "\t\tif test -e \"$tmp_qfasta.fai\"; then\n";
-										$cmd .= "\t\t\trm $tmp_qfasta.\*\n";
-										$cmd .= "\t\tfi\n";
-										$cmd .= "\t\tif test -e \"$tmp_qgff\"; then\n";
-										$cmd .= "\t\t\trm $tmp_qgff\n";
-										$cmd .= "\t\tfi\n";
-										$cmd .= "\tfi\n";
-										$cmd .= "fi\n";
-									}
+									$cmd .= "perl $bin_findorf $hbinpath->{gth} $hbinpath->{miniprot} $hbinpath->{samtools} $hbinpath->{gffread} $hbinpath->{blat} $hbinpath->{blat2hints} $hbinpath->{matcher} $gid $tmp_dbprot $tmp_dbtranscript $tmp_dbcds $tmp_qfasta $tmp_qgff $tmp_qprot $tmp_align $tmpdir $qpref $qpos0 $combined_qprot $combined_qgff >> $log_orfsearch 2>&1\n";
 								}
 								
 								# time-consuming...
@@ -768,13 +746,13 @@ elsif(-e $afile){
 			}
 			
 			if($cmd){
-				if(-e $log_gth){
-					system("rm $log_gth");
+				if(-e $log_orfsearch){
+					system("rm $log_orfsearch");
 				}
-				$cmd .= "echo 'all_done' >> $log_gth\n";
+				$cmd .= "echo 'all_done' >> $log_orfsearch\n";
 				SAVE($script, $cmd);
 				push(@I1, $script);
-				push(@I4, $log_gth);
+				push(@I4, $log_orfsearch);
 			}
 		}
 		
@@ -811,14 +789,14 @@ elsif(-e $afile){
 		}
 		
 		if($host eq 'cluster1'){
-			print "! genome threader with [$cpu] nodes...\n";
+			print "! ORF search with [$cpu] nodes...\n";
 			my $num_I1 = @I1;
 			for(my $i = 0; $i < $num_I1; $i++){
 				system("qsub $I1[$i]");
 			}
 		}
 		else{
-			print "! genome threader with [$cpu] threads...\n";
+			print "! ORF search with [$cpu] threads...\n";
 			my $num_I1 = @I1;
 			my $thrs2 = [];
 			for(my $i = 0; $i < $num_I1; $i++){
@@ -838,8 +816,8 @@ elsif(-e $afile){
 		}
 		my $num_I4 = @I4;
 		my $ncompleted_gth = 0;
-		foreach my $log_gth (@I4){
-			$ncompleted_gth += JudgeJob($log_gth);
+		foreach my $log_orfsearch (@I4){
+			$ncompleted_gth += JudgeJob($log_orfsearch);
 		}
 		if($ncompleted_gth < $num_I4){
 			sleep(30);
@@ -930,6 +908,10 @@ elsif(-e $afile){
 	Rm_files(\@I1);
 	Mv_files(\@I4, "cmds");
 	Rm_files(\@gabbage);
+	
+	if($redo_examine){
+		SAVE($redo_log, "--5 done.\n");
+	}
 }
 else{
 	print "! unable to find [$afile], no candidate found...\n";
@@ -971,6 +953,42 @@ END:{
 
 
 ################################################################################
+#-------------------------------------------------------------------------------
+sub Read_and_makehist{
+my ($file, $hist) = @_;
+
+open(my $fh, "<", $file);
+my $cnt = 0;
+my $r;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+		next;
+	}
+	if($cnt == 0){
+		$cnt++;
+		next;
+	}
+	
+	my @A = split(/\t/, $line);
+	if($A[23]){
+		$r .= $A[23]."\n";
+	}
+	$cnt++;
+}
+close $fh;
+
+if($r){
+	open(my $rfh, ">", $hist);
+	print $rfh $r;
+	close $rfh;
+}
+
+}
+
+
 #-------------------------------------------------------------------------------
 sub JudgeJob{
 my $file = shift;
@@ -1350,11 +1368,11 @@ my $p0 = shift;
 my $p1 = shift;
 
 if($seq){
-	my $subseq = substr($seq, $p0, $p1);
+	my $subseq = substr($seq, $p0 - 1, abs($p1 - $p0));
 	my $subfasta = ">".$id."\n".$subseq;
 	
 	unless(-e $rfile){
-		open(my $rfh, ">", $rfile);
+		open(my $rfh, ">", $rfile) or return 'null';
 		print $rfh $subfasta;
 		close $rfh;
 	}
@@ -1689,6 +1707,14 @@ if(-e $file){
 	while(my $line = <$fh>){
 		$line =~ s/\n//;
 		$line =~ s/\r//;
+		
+		unless($line){
+			next;
+		}
+		if($line =~ /\t/){
+			my @A = split(/\t/, $line);
+			$line = join("_", @A);
+		}
 		
 		if($id eq $line){
 			$sw = "true";
