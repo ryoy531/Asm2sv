@@ -11,8 +11,6 @@ $version .= "copyright: ryoichi yano\n";
 
 #-------------------------------------------------------------------------------
 
-#mRNA sequenceからprotein coding sequenceを探索してレポートする。
-#Fix_ATGcodon_gff.plなどで使用。
 
 my $mRNAseq = shift;		#input is not file but sequence string like 'TGAAATTCTCGAATAAGAAGACGTACCCACTTGCTGGAACGCTCAAATTTCTTCACCCCAGAGC'
 my $prefix = shift;
