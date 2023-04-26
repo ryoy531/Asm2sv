@@ -23,7 +23,9 @@ unless($data_path){
 }
 
 my $file_str = shift;
-my $refgenome = shift;
+my $reffasta = shift;
+my $refgff = shift;
+my $datalist = shift;
 my $chrinfo = shift;
 my $qorf_str = shift;
 my $zip = shift;
@@ -36,12 +38,28 @@ unless($qorf_str){
 	print "! missing qorf file string...\n";
 	goto END;
 }
-unless($refgenome){
-	$refgenome = "null";
+if(! $reffasta || ! -e $reffasta){
+	print "! missing reference fasta...\n";
+	goto END;
+}
+if(! $refgff || ! -e $refgff){
+	print "! missing reference Gff...\n";
+	goto END;
+}
+unless($datalist){
+	print "! missing datalist...\n";
+	goto END;
 }
 unless($chrinfo){
-	$chrinfo = "null";
+	print "! missing chrinfo...\n";
+	goto END;
 }
+
+my @PREF = split(/\//, $datalist);
+my $num_PREF = @PREF;
+$PREF[$num_PREF - 1] =~ s/\.csv//;
+$PREF[$num_PREF - 1] =~ s/\.tsv//;
+my $prefix = $PREF[$num_PREF - 1];
 
 my @F0 = split(/,/, $file_str);
 my @Q0 = split(/,/, $qorf_str);
@@ -64,12 +82,43 @@ for(my $i = 0; $i < $numF0; $i++){
 
 print "\n";
 my $hseqinfo = {};
+my $halias_name = {};
+my $hnorder_name = {};
+my $norder_status = 0;
 if($chrinfo ne 'null' && -e $chrinfo){
-	$hseqinfo = Read_seqinfo($chrinfo);
+	my $htmp_chrinfo = Read_seqinfo($chrinfo);
+	$hseqinfo = $htmp_chrinfo->{seqID};
+	
+	if($htmp_chrinfo->{alias_name}){
+		$halias_name = $htmp_chrinfo->{alias_name};
+	}
+	if($htmp_chrinfo->{norder_status}){
+		$hnorder_name = $htmp_chrinfo->{norder};
+		$norder_status = 1;
+	}
+}
+
+my $refgenome = "null";
+my $hfasta = {};
+if($reffasta ne 'null' && -e $reffasta){
+	my @REFS = split(/\//, $reffasta);
+	my $nREFS = @REFS;
+	$refgenome = $REFS[$nREFS - 1];
+	$refgenome =~ s/\.fasta//;
+	$refgenome =~ s/\.fa//;
+	
+	$hfasta = Stats_fasta($reffasta);
+}
+
+my $hgff = {};
+if($refgff ne 'null' && -e $refgff){
+	my $htmp_gff = Gff_to_hash($refgff);
+	$hgff = $htmp_gff->{hgff};
 }
 
 print "! collecting data...\n";
 my $hash = {};
+my $neighbor_tlen = 0;
 foreach my $tmp (@{$AoF}){
 	my $file = $tmp->[0];
 	
@@ -80,7 +129,19 @@ foreach my $tmp (@{$AoF}){
 	}
 }
 
-print "! summarizing data...\n";
+my $hnrtlen = $hash->{neighbor_tlen};
+my @NRtlen = keys(%{$hnrtlen});
+my $num_NRtlen = @NRtlen;
+if($num_NRtlen != 1){
+	print "! abort script due to multiple neighbor_tlen (results may be mixture of different parameter settings)...\n";
+	goto END;
+}
+else{
+	$neighbor_tlen = $NRtlen[0];
+}
+print "! --neighbor = [$neighbor_tlen] bp\n";
+
+print "\n! now summarizing data...\n";
 my $hginfo = $hash->{ginfo};
 my @GID = keys(%{$hginfo});
 my $AoG1 = [];
@@ -142,10 +203,43 @@ my @Samples = keys(%{$hpav});
 
 my @SHeader;
 my @Sorted_samples;
+if($norder_status == 1){
+	my $AoN = [];
+	my $nrmiss = {};
+	foreach my $id (@Samples){
+		if(defined $hnorder_name->{$id} && $hnorder_name->{$id} !~ /\D/ && $hnorder_name->{$id} =~ /\d/ && ! $nrmiss->{0}{$id}){
+			my @tmp;
+			push(@tmp, $id);
+			push(@tmp, $hnorder_name->{$id});
+			push(@{$AoN}, \@tmp);
+		}
+		else{
+			$nrmiss->{$id} = 1;
+		}
+	}
+	@{$AoN} = sort {$a->[1] <=> $b->[1]} @{$AoN};
+	
+	my @Sorted_samples0;
+	foreach my $tmp (@{$AoN}){
+		push(@Sorted_samples0, $tmp->[0]);
+	}
+	foreach my $id (@Samples){
+		if($nrmiss->{$id}){
+			push(@Sorted_samples0, $id);
+		}
+	}
+	@Samples = @Sorted_samples0;
+}
+
 foreach my $id (@Samples){
 	if($refgenome ne 'null'){
 		if($id eq $refgenome){
-			push(@SHeader, "$id [reference]");
+			if($halias_name && $halias_name->{$id}){
+				push(@SHeader, "$halias_name->{$id} [reference]");
+			}
+			else{
+				push(@SHeader, "$id [reference]");
+			}
 			push(@Sorted_samples, $id);
 		}
 	}
@@ -153,7 +247,12 @@ foreach my $id (@Samples){
 foreach my $id (@Samples){
 	if($refgenome ne 'null'){
 		if($id ne $refgenome){
-			push(@SHeader, $id);
+			if($halias_name && $halias_name->{$id}){
+				push(@SHeader, $halias_name->{$id});
+			}
+			else{
+				push(@SHeader, $id);
+			}
 			push(@Sorted_samples, $id);
 		}
 	}
@@ -166,9 +265,10 @@ foreach my $id (@Samples){
 
 #my $r1 = "gene_id,Chr,sp0,sp1,cnt 0-0.3,cnt 0.3-0.6,cnt 0.6-0.9,cnt >=0.9,reference,".join(",", @Samples)."\n";
 my $r1 = "gene_id,Chr,pos0,pos1,cnt 0-0.3,cnt 0.3-0.6,cnt 0.6-0.9,cnt >=0.9,".join(",", @SHeader)."\n";
-my $r1B = "gene_id,Chr,pos0,pos1,cnt 0-0.6,cnt 0.6-1.2,cnt 1.2-0.1.8,cnt >=1.8,".join(",", @SHeader)."\n";
+my $r1B = "gene_id,Chr,pos0,pos1,cnt 0-0.6,cnt 0.6-1.2,cnt 1.2-1.8,cnt >=1.8,".join(",", @SHeader)."\n";
+my $r1C = "gene_id,class,Chr,pos0,pos1,cnt 0-0.6,cnt 0.6-1.2,cnt 1.2-1.8,cnt >=1.8,".join(",", @SHeader)."\n";
 my $r1_nmatrix = "gene_id,".join(",", @SHeader)."\n";
-my $r1B_nmatrix = "gene_id,".join(",", @SHeader)."\n";
+my $r1B_nmatrix = "gene_id,Chr,pos0,pos1,cumpos,".join(",", @SHeader)."\n";
 #my $r1 = "gene_id,reference,".join(",", @Samples)."\n";
 $r1 =~ s/\.genome//g;
 $r1 =~ s/_GCA_022114995_renamed//g;
@@ -183,10 +283,12 @@ my $r9 = $r1;
 my $r10 = $r1;
 my $r11 = $r1;
 my $r11B = $r1B;
+my $r11C = $r1C;
+my $r11G = $r1C;
 my $r12 = $r1;
 my $r15 = $r1;
-my $r17 = $r1;
-my $r19 = $r1;
+my $r17 = $r1B;
+my $r19 = $r1B;
 my $r101 = $r1;
 my $r101M = $r1;
 my $r101B = $r1;
@@ -213,6 +315,7 @@ my $r11_nmatrix = $r1_nmatrix;
 my $r15_nmatrix = $r1_nmatrix;
 my $r17_nmatrix = $r1_nmatrix;
 my $r19_nmatrix = $r1_nmatrix;
+#---------------------------------------
 my $r11B_nmatrix = $r1B_nmatrix;
 my $r11R_nmatrix = $r1B_nmatrix;
 my $r11N_nmatrix = $r1B_nmatrix;
@@ -220,6 +323,26 @@ my $r11Z_nmatrix = $r1B_nmatrix;
 my $r11L_nmatrix = $r1B_nmatrix;
 my $r11RZ_nmatrix = $r1B_nmatrix;
 my $r11RL_nmatrix = $r1B_nmatrix;
+#---------------------------------------
+my $r11C_nmatrix = $r1B_nmatrix;
+my $r11CR_nmatrix = $r1B_nmatrix;
+my $r11CN_nmatrix = $r1B_nmatrix;
+my $r11CZ_nmatrix = $r1B_nmatrix;
+my $r11CL_nmatrix = $r1B_nmatrix;
+my $r11CRZ_nmatrix = $r1B_nmatrix;
+my $r11CRL_nmatrix = $r1B_nmatrix;
+#---------------------------------------
+my $r11G_nmatrix = $r1B_nmatrix;
+my $r11GR_nmatrix = $r1B_nmatrix;
+my $r11GN_nmatrix = $r1B_nmatrix;
+my $r11GZ_nmatrix = $r1B_nmatrix;
+my $r11GL_nmatrix = $r1B_nmatrix;
+my $r11GRZ_nmatrix = $r1B_nmatrix;
+my $r11GRL_nmatrix = $r1B_nmatrix;
+#---------------------------------------
+
+my $r_gntable = "gene_id,Chr,pos0,pos1,cumpos,class,num_genotype,ratio_minor,num_each,".join(",", @SHeader)."\n";
+
 
 #my $r_hist = "gene_id,Chr,sp0,sp1,gene 0-0.25,gene 0.25-0.50,gene 0.50-0.75,gene 0.75-1.0,gene 1.0-,.,protein 0-0.25,protein 0.25-0.50,protein 0.50-0.75,protein 0.75-1.0,protein 1.0-,.,promoter 0-0.25,promoter 0.25-0.50,promoter 0.50-0.75,promoter 0.75-1.0,promoter 1.0-,.,3'-UTR 0-0.25,3'-UTR 0.25-0.50,3'-UTR 0.50-0.75,3'-UTR 0.75-1.0,3'-UTR 1.0-\n";
 my $r_hist = "gene_id,Chr,pos0,pos1,refgenome_judge,";
@@ -282,6 +405,8 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 	
 	for(my $ig = 0; $ig < $hsortedGID->{$nc}{num}; $ig++){
 		my $gid = $eachGID[$ig];
+		my $gid_seqid = $hginfo->{$gid}{Chr};
+		
 		my $hjudge = {};
 		my $num_conserved = 0;
 		my $num_conserved_prom = 0;
@@ -306,6 +431,9 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 		my @Geno3;
 		my @Geno4;
 		my @Geno5;
+		my @GenoTable;
+		my @GenoTablep;
+		my @GenoTableu;
 		my @Geno101;
 		my @Geno101B;
 		my @Geno102;
@@ -356,6 +484,16 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 			}
 			elsif($hash->{sv}{$id}{$gid} > 1){
 				$hash->{sv}{$id}{$gid} = 1;
+			}
+			
+			if(! $hash->{gntype}{$id}{$gid} || $hash->{gntype}{$id}{$gid} eq '-'){
+				$hash->{gntype}{$id}{$gid} = "NA";
+			}
+			if(! $hash->{gntype_promoter}{$id}{$gid} || $hash->{gntype_promoter}{$id}{$gid} eq '-'){
+				$hash->{gntype_promoter}{$id}{$gid} = "NA";
+			}
+			if(! $hash->{gntype_utr}{$id}{$gid} || $hash->{gntype_utr}{$id}{$gid} eq '-'){
+				$hash->{gntype_utr}{$id}{$gid} = "NA";
 			}
 			
 			if(! $hash->{sv2}{$id}{$gid} || $hash->{sv2}{$id}{$gid} eq '-'){
@@ -449,12 +587,15 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 			$hash->{svprom}{$id}{$gid} = sprintf("%.4f", $hash->{svprom}{$id}{$gid});
 			$hash->{svutr3}{$id}{$gid} = sprintf("%.4f", $hash->{svutr3}{$id}{$gid});
 			
-			push(@Geno1, $hash->{sv}{$id}{$gid});
-			push(@Geno1B, $hash->{sv2}{$id}{$gid});
+			push(@Geno1, $hash->{sv}{$id}{$gid});			# sv = disrupt score
+			push(@Geno1B, $hash->{sv2}{$id}{$gid});			# sv2 = indel score
 			push(@Geno2, $hash->{raw}{$id}{$gid});
 			push(@Geno3, $hash->{svprot}{$id}{$gid});
 			push(@Geno4, $hash->{svprom}{$id}{$gid});
 			push(@Geno5, $hash->{svutr3}{$id}{$gid});
+			push(@GenoTable, $hash->{gntype}{$id}{$gid});
+			push(@GenoTablep, $hash->{gntype_promoter}{$id}{$gid});
+			push(@GenoTableu, $hash->{gntype_utr}{$id}{$gid});
 			
 			if($refgenome ne 'null'){
 				if($id eq $refgenome){
@@ -464,6 +605,10 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 				my $refchr = $hash->{refchr}{$refgenome}{$gid};
 				my $refpos0 = $hash->{refpos0}{$refgenome}{$gid};
 				my $refpos1 = $hash->{refpos1}{$refgenome}{$gid};
+				
+				if($hash->{hconvid}{$refgenome}{$gid}){
+					$refchr = $hash->{hconvid}{$refgenome}{$gid};
+				}
 				
 				my $judge_diffchr = "null";
 				my $judge_trans = "null";
@@ -625,11 +770,68 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 		}
 		($hgeneinfo->{hist_value1}{$gid}, $hgeneinfo->{hist_header1}) = Array2histcsv(\@Geno1);
 		($hgeneinfo->{hist_value3}{$gid}, $hgeneinfo->{hist_header3}) = Array2histcsv(\@Geno3);
-		($hgeneinfo->{hist_value4}{$gid}, $hgeneinfo->{hist_header4}) = Array2histcsv(\@Geno4);
-		($hgeneinfo->{hist_value5}{$gid}, $hgeneinfo->{hist_header5}) = Array2histcsv(\@Geno5);
+		($hgeneinfo->{hist_value4}{$gid}, $hgeneinfo->{hist_header4}) = Array2histcsv2(\@Geno4);
+		($hgeneinfo->{hist_value5}{$gid}, $hgeneinfo->{hist_header5}) = Array2histcsv2(\@Geno5);
 		($hgeneinfo->{hist_value1B}{$gid}, $hgeneinfo->{hist_header1B}) = Array2histcsv2(\@Geno1B);
 		
-		$r_hist .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$judge_refgenome.",".$hgeneinfo->{hist_value1}{$gid}.",.,".$hgeneinfo->{hist_value3}{$gid}.",.,".$hgeneinfo->{hist_value4}{$gid}.",.,".$hgeneinfo->{hist_value5}{$gid}."\n";
+		$hgeneinfo->{gntable_info}{$gid} = Array2histcsv3(\@GenoTable);
+		$hgeneinfo->{gntable_infop}{$gid} = Array2histcsv3(\@GenoTablep);
+		$hgeneinfo->{gntable_infou}{$gid} = Array2histcsv3(\@GenoTableu);
+		
+		$hginfo->{$gid}{pos0_p} = $hginfo->{$gid}{pos0};
+		$hginfo->{$gid}{pos1_p} = $hginfo->{$gid}{pos0};
+		$hginfo->{$gid}{pos0_u} = $hginfo->{$gid}{pos1};
+		$hginfo->{$gid}{pos1_u} = $hginfo->{$gid}{pos1};
+		my $cumpos_p = $hginfo->{$gid}{pos0_p} + $hfasta->{$gid_seqid}{cumlen0};
+		my $cumpos_g = $hginfo->{$gid}{pos0} + $hfasta->{$gid_seqid}{cumlen0};
+		my $cumpos_u = $hginfo->{$gid}{pos0_u} + $hfasta->{$gid_seqid}{cumlen0};
+		
+		if($hgff->{$gid}{strand}){
+			if($hgff->{$gid}{strand} eq '+'){
+				$hginfo->{$gid}{pos0_p} = $hginfo->{$gid}{pos0} - $neighbor_tlen - 1;
+				$hginfo->{$gid}{pos1_p} = $hginfo->{$gid}{pos0} - 1;
+				$hginfo->{$gid}{pos0_u} = $hginfo->{$gid}{pos1} + 1;
+				$hginfo->{$gid}{pos1_u} = $hginfo->{$gid}{pos1} + $neighbor_tlen + 1;
+				
+				if($hginfo->{$gid}{pos0_p} < 1){
+					$hginfo->{$gid}{pos0_p} = 1;
+				}
+				if($hginfo->{$gid}{pos1_p} < 1){
+					$hginfo->{$gid}{pos1_p} = 1;
+				}
+				
+				$cumpos_p = $hginfo->{$gid}{pos0_p} + $hfasta->{$gid_seqid}{cumlen0};
+				$cumpos_g = $hginfo->{$gid}{pos0} + $hfasta->{$gid_seqid}{cumlen0};
+				$cumpos_u = $hginfo->{$gid}{pos0_u} + $hfasta->{$gid_seqid}{cumlen0};
+				
+				$r_gntable .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$cumpos_p.",p,".$hgeneinfo->{gntable_infop}{$gid}.",".join(",", @GenoTablep)."\n";
+				$r_gntable .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",g,".$hgeneinfo->{gntable_info}{$gid}.",".join(",", @GenoTable)."\n";
+				$r_gntable .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$cumpos_u.",u,".$hgeneinfo->{gntable_infou}{$gid}.",".join(",", @GenoTableu)."\n";
+			}
+			elsif($hgff->{$gid}{strand} eq '-'){
+				$hginfo->{$gid}{pos0_u} = $hginfo->{$gid}{pos0} - $neighbor_tlen - 1;
+				$hginfo->{$gid}{pos1_u} = $hginfo->{$gid}{pos0} - 1;
+				$hginfo->{$gid}{pos0_p} = $hginfo->{$gid}{pos1} + 1;
+				$hginfo->{$gid}{pos1_p} = $hginfo->{$gid}{pos1} + $neighbor_tlen + 1;
+				
+				if($hginfo->{$gid}{pos0_u} < 1){
+					$hginfo->{$gid}{pos0_u} = 1;
+				}
+				if($hginfo->{$gid}{pos1_u} < 1){
+					$hginfo->{$gid}{pos1_u} = 1;
+				}
+				
+				$cumpos_p = $hginfo->{$gid}{pos0_p} + $hfasta->{$gid_seqid}{cumlen0};
+				$cumpos_g = $hginfo->{$gid}{pos0} + $hfasta->{$gid_seqid}{cumlen0};
+				$cumpos_u = $hginfo->{$gid}{pos0_u} + $hfasta->{$gid_seqid}{cumlen0};
+				
+				$r_gntable .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$cumpos_u.",p,".$hgeneinfo->{gntable_infou}{$gid}.",".join(",", @GenoTableu)."\n";
+				$r_gntable .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",g,".$hgeneinfo->{gntable_info}{$gid}.",".join(",", @GenoTable)."\n";
+				$r_gntable .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$cumpos_p.",u,".$hgeneinfo->{gntable_infop}{$gid}.",".join(",", @GenoTablep)."\n";
+			}
+		}
+		
+		$r_hist .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$judge_refgenome.",".$hgeneinfo->{hist_value1}{$gid}.",.,".$hgeneinfo->{hist_value3}{$gid}.",.,".$hgeneinfo->{hist_value4}{$gid}.",.,".$hgeneinfo->{hist_value5}{$gid}."\n";
 		
 		if($refgenome ne 'null' && $judge_refgenome ne 'true'){		# skip record if refgenome is not genotyped (assume 1 in all genes but some may fail)
 			$cnt_reffail++;
@@ -646,35 +848,35 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 				
 #				if($num_nonzero1 > 0 && $num_nodata1 == 0){
 				if($num_nonzero1 > 0){
-					$r101 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value101}{$gid}.",".join(",", @Geno101)."\n";			# disrupt
-					$r101B .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value101B}{$gid}.",".join(",", @Geno101B)."\n";		# indel
+					$r101 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value101}{$gid}.",".join(",", @Geno101)."\n";			# disrupt
+					$r101B .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value101B}{$gid}.",".join(",", @Geno101B)."\n";		# indel
 					$hgeneclass->{transloc_val}{$gid} = 1;
 					$cnt_geno101++;
 					
 					if($num_conserved > 0 && $num_misgenotype == 0 && $num_nodata1 == 0){
-						$r101M .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value101}{$gid}.",".join(",", @Geno101)."\n";
+						$r101M .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value101}{$gid}.",".join(",", @Geno101)."\n";
 					}
 				}
 				if($num_nonzero2 > 0){
-					$r102 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno102)."\n";
+					$r102 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno102)."\n";
 					$hgeneclass->{transloc_raw}{$gid} = 1;
 					$cnt_geno102++;
 				}
 #				if($num_nonzero3 > 0 && $num_nodata3 == 0){
 				if($num_nonzero3 > 0 && $failprot_refgenome == 0){
-					$r103 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value103}{$gid}.",".join(",", @Geno103)."\n";
+					$r103 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value103}{$gid}.",".join(",", @Geno103)."\n";
 					$hgeneclass->{transloc_prot}{$gid} = 1;
 					$cnt_geno103++;
 				}
 #				if($num_nonzero4 > 0 && $num_nodata4 == 0){
 				if($num_nonzero4 > 0){
-					$r104 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value104}{$gid}.",".join(",", @Geno104)."\n";
+					$r104 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value104}{$gid}.",".join(",", @Geno104)."\n";
 					$hgeneclass->{transloc_prom}{$gid} = 1;
 					$cnt_geno104++;
 				}
 #				if($num_nonzero5 > 0 && $num_nodata5 == 0){
 				if($num_nonzero5 > 0){
-					$r105 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value105}{$gid}.",".join(",", @Geno105)."\n";
+					$r105 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value105}{$gid}.",".join(",", @Geno105)."\n";
 					$hgeneclass->{transloc_utr3}{$gid} = 1;
 					$cnt_geno105++;
 				}
@@ -690,43 +892,43 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 					
 	#				if($num_nonzero1 > 0 && $num_nodata1 == 0){
 					if($num_nonzero1 > 0){
-						$r201 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value201}{$gid}.",".join(",", @Geno201)."\n";
-						$r201B .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value201B}{$gid}.",".join(",", @Geno201B)."\n";
-						$r201i .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value201}{$gid}.",".join(",", @Geno201i)."\n";
+						$r201 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value201}{$gid}.",".join(",", @Geno201)."\n";
+						$r201B .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value201B}{$gid}.",".join(",", @Geno201B)."\n";
+						$r201i .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value201}{$gid}.",".join(",", @Geno201i)."\n";
 						$hgeneclass->{transloc_val}{$gid} = 1;
 						$cnt_geno201++;
 						
 						if($num_conserved > 0 && $num_misgenotype == 0 && $num_nodata1 == 0){
-							$r201M .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value201}{$gid}.",".join(",", @Geno201)."\n";
+							$r201M .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value201}{$gid}.",".join(",", @Geno201)."\n";
 						}
 					}
 					if($num_nonzero2 > 0){
-						$r202 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno202)."\n";
+						$r202 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno202)."\n";
 						$hgeneclass->{transloc_raw}{$gid} = 1;
 						$cnt_geno202++;
 					}
 	#				if($num_nonzero3 > 0 && $num_nodata3 == 0){
 					if($num_nonzero3 > 0 && $failprot_refgenome == 0){
-						$r203 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value203}{$gid}.",".join(",", @Geno203)."\n";
+						$r203 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value203}{$gid}.",".join(",", @Geno203)."\n";
 						$hgeneclass->{transloc_prot}{$gid} = 1;
 						$cnt_geno203++;
 					}
 	#				if($num_nonzero4 > 0 && $num_nodata4 == 0){
 					if($num_nonzero4 > 0){
-						$r204 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value204}{$gid}.",".join(",", @Geno204)."\n";
+						$r204 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value204}{$gid}.",".join(",", @Geno204)."\n";
 						$hgeneclass->{transloc_prom}{$gid} = 1;
 						$cnt_geno204++;
 					}
 	#				if($num_nonzero5 > 0 && $num_nodata5 == 0){
 					if($num_nonzero5 > 0){
-						$r205 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value205}{$gid}.",".join(",", @Geno205)."\n";
+						$r205 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value205}{$gid}.",".join(",", @Geno205)."\n";
 						$hgeneclass->{transloc_utr3}{$gid} = 1;
 						$cnt_geno205++;
 					}
 				}
 				else{
 					if($num_conserved > 0 && $num_misgenotype == 0 && $num_nodata1 == 0){
-						$r201M .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
+						$r201M .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
 					}
 				}
 				
@@ -741,58 +943,58 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 					
 	#				if($num_nonzero1 > 0 && $num_nodata1 == 0){
 					if($num_nonzero1 > 0){
-						$r301 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value301}{$gid}.",".join(",", @Geno301)."\n";
-						$r301B .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value301B}{$gid}.",".join(",", @Geno301B)."\n";
+						$r301 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value301}{$gid}.",".join(",", @Geno301)."\n";
+						$r301B .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value301B}{$gid}.",".join(",", @Geno301B)."\n";
 						$hgeneclass->{transloc_val}{$gid} = 1;
 						$cnt_geno301++;
 						
 						if($num_conserved > 0 && $num_misgenotype == 0 && $num_nodata1 == 0){
-							$r301M .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value301}{$gid}.",".join(",", @Geno301)."\n";
+							$r301M .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value301}{$gid}.",".join(",", @Geno301)."\n";
 						}
 					}
 					if($num_nonzero2 > 0){
-						$r302 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno302)."\n";
+						$r302 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno302)."\n";
 						$hgeneclass->{transloc_raw}{$gid} = 1;
 						$cnt_geno302++;
 					}
 	#				if($num_nonzero3 > 0 && $num_nodata3 == 0){
 					if($num_nonzero3 > 0 && $failprot_refgenome == 0){
-						$r303 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value303}{$gid}.",".join(",", @Geno303)."\n";
+						$r303 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value303}{$gid}.",".join(",", @Geno303)."\n";
 						$hgeneclass->{transloc_prot}{$gid} = 1;
 						$cnt_geno303++;
 					}
 	#				if($num_nonzero4 > 0 && $num_nodata4 == 0){
 					if($num_nonzero4 > 0){
-						$r304 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value304}{$gid}.",".join(",", @Geno304)."\n";
+						$r304 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value304}{$gid}.",".join(",", @Geno304)."\n";
 						$hgeneclass->{transloc_prom}{$gid} = 1;
 						$cnt_geno304++;
 					}
 	#				if($num_nonzero5 > 0 && $num_nodata5 == 0){
 					if($num_nonzero5 > 0){
-						$r305 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value305}{$gid}.",".join(",", @Geno305)."\n";
+						$r305 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value305}{$gid}.",".join(",", @Geno305)."\n";
 						$hgeneclass->{transloc_utr3}{$gid} = 1;
 						$cnt_geno305++;
 					}
 				}
 				else{
 					if($num_conserved > 0 && $num_misgenotype == 0 && $num_nodata1 == 0){
-						$r301M .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
+						$r301M .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
 					}
 				}
 			}
 			else{
 				if($num_conserved > 0 && $num_misgenotype == 0 && $num_nodata1 == 0){
-					$r101M .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
-					$r201M .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
-					$r301M .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
+					$r101M .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
+					$r201M .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
+					$r301M .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,\n";
 				}
 			}
 		}
 		
 #		if($num_nonzero1 > 0 && $num_nodata1 == 0){
 		if($num_nonzero1 > 0){
-			$r1 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1}{$gid}.",".join(",", @Geno1)."\n";
-			$r1B .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1B}{$gid}.",".join(",", @Geno1B)."\n";
+			$r1 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1}{$gid}.",".join(",", @Geno1)."\n";
+			$r1B .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1B}{$gid}.",".join(",", @Geno1B)."\n";
 			$hgeneclass->{val}{$gid} = 1;
 			$cnt_geno1++;
 		}
@@ -800,35 +1002,40 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 			$cnt_geno1_rm++;
 		}
 		if($num_nonzero2 > 0){
-			$r2 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno2)."\n";
+			$r2 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno2)."\n";
 			$hgeneclass->{raw}{$gid} = 1;
 			$cnt_geno2++;
 		}
 #		if($num_nonzero3 > 0 && $num_nodata3 == 0){
 		if($num_nonzero3 > 0 && $failprot_refgenome == 0){
-			$r5 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
+			$r5 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
 			$hgeneclass->{prot}{$gid} = 1;
 			$cnt_geno5++;
 		}
 #		if($num_nonzero4 > 0 && $num_nodata4 == 0){
 		if($num_nonzero4 > 0){
-			$r7 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value4}{$gid}.",".join(",", @Geno4)."\n";
+			$r7 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$hgeneinfo->{hist_value4}{$gid}.",".join(",", @Geno4)."\n";
 			$hgeneclass->{prom}{$gid} = 1;
 			$cnt_geno7++;
 		}
 #		if($num_nonzero5 > 0 && $num_nodata5 == 0){
 		if($num_nonzero5 > 0){
-			$r9 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value5}{$gid}.",".join(",", @Geno5)."\n";
+			$r9 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$hgeneinfo->{hist_value5}{$gid}.",".join(",", @Geno5)."\n";
 			$hgeneclass->{utr3}{$gid} = 1;
 			$cnt_geno9++;
 		}
 		
 		if($num_conserved > 0 && $num_misgenotype == 0){		# double check of no data with $num_misgenotype == 0
 			if($num_nonzero1 > 0 && $num_nodata1 == 0){
-				$r11 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1}{$gid}.",".join(",", @Geno1)."\n";
+				$r11 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1}{$gid}.",".join(",", @Geno1)."\n";
 				$r11_nmatrix .= $gid.",".join(",", @Geno1)."\n";
-				$r11B .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1B}{$gid}.",".join(",", @Geno1B)."\n";
-				$r11B_nmatrix .= $gid.",".join(",", @Geno1B)."\n";
+				$r11B .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1B}{$gid}.",".join(",", @Geno1B)."\n";
+				$r11B_nmatrix .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @Geno1B)."\n";
+				$r11C .= $gid.",gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1B}{$gid}.",".join(",", @Geno1B)."\n";
+				$r11C_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @Geno1B)."\n";
+				$r11G .= $gid.",gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1B}{$gid}.",".join(",", @Geno1B)."\n";
+				$r11G_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @Geno1B)."\n";
+				
 				my $hrzval = Calc_normalizedvals(\@Geno1B);
 				my $Geno1R = $hrzval->{R};
 				my $Geno1N = $hrzval->{N};
@@ -836,12 +1043,24 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 				my $Geno1L = $hrzval->{L};
 				my $Geno1RZ = $hrzval->{RZ};
 				my $Geno1RL = $hrzval->{RL};
-				$r11R_nmatrix .= $gid.",".join(",", @{$Geno1R})."\n";
-				$r11N_nmatrix .= $gid.",".join(",", @{$Geno1N})."\n";
-				$r11Z_nmatrix .= $gid.",".join(",", @{$Geno1Z})."\n";
-				$r11L_nmatrix .= $gid.",".join(",", @{$Geno1L})."\n";
-				$r11RZ_nmatrix .= $gid.",".join(",", @{$Geno1RZ})."\n";
-				$r11RL_nmatrix .= $gid.",".join(",", @{$Geno1RL})."\n";
+				$r11R_nmatrix .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1R})."\n";
+				$r11N_nmatrix .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1N})."\n";
+				$r11Z_nmatrix .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1Z})."\n";
+				$r11L_nmatrix .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1L})."\n";
+				$r11RZ_nmatrix .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1RZ})."\n";
+				$r11RL_nmatrix .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1RL})."\n";
+				$r11CR_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1R})."\n";
+				$r11CN_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1N})."\n";
+				$r11CZ_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1Z})."\n";
+				$r11CL_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1L})."\n";
+				$r11CRZ_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1RZ})."\n";
+				$r11CRL_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1RL})."\n";
+				$r11GR_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1R})."\n";
+				$r11GN_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1N})."\n";
+				$r11GZ_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1Z})."\n";
+				$r11GL_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1L})."\n";
+				$r11GRZ_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1RZ})."\n";
+				$r11GRL_nmatrix .= $gid."_gene,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno1RL})."\n";
 				$hgeneclass->{val_1cnsv}{$gid} = 1;
 				$cnt_geno11++;
 			}
@@ -849,53 +1068,109 @@ for(my $nc = 1; $nc <= $norder; $nc++){
 				$cnt_geno11_rm++;
 			}
 			if($num_nonzero2 > 0){
-				$r12 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno2)."\n";
+				$r12 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno2)."\n";
 				$hgeneclass->{raw_1cnsv}{$gid} = 1;
 				$cnt_geno12++;
 			}
 			if($num_nonzero3 > 0 && $num_nodata3 == 0 && $failprot_refgenome == 0){
-				$r15 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
+				$r15 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
 				$r15_nmatrix .= $gid.",".join(",", @Geno3)."\n";
+				$r11C .= $gid.",protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
+				$r11C_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @Geno3)."\n";
+				$r11G .= $gid.",protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
+				$r11G_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @Geno3)."\n";
+				
+				my $hrzval = Calc_normalizedvals(\@Geno3);
+				my $Geno3R = $hrzval->{R};
+				my $Geno3N = $hrzval->{N};
+				my $Geno3Z = $hrzval->{Z};
+				my $Geno3L = $hrzval->{L};
+				my $Geno3RZ = $hrzval->{RZ};
+				my $Geno3RL = $hrzval->{RL};
+				$r11CR_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3R})."\n";
+				$r11CN_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3N})."\n";
+				$r11CZ_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3Z})."\n";
+				$r11CL_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3L})."\n";
+				$r11CRZ_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3RZ})."\n";
+				$r11CRL_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3RL})."\n";
+				$r11GR_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3R})."\n";
+				$r11GN_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3N})."\n";
+				$r11GZ_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3Z})."\n";
+				$r11GL_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3L})."\n";
+				$r11GRZ_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3RZ})."\n";
+				$r11GRL_nmatrix .= $gid."_protein,".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$cumpos_g.",".join(",", @{$Geno3RL})."\n";
 				$hgeneclass->{prot_1cnsv}{$gid} = 1;
 				$cnt_geno15++;
 			}
 		}
 		if($num_conserved_prom > 0 && $num_nonzero4 > 0 && $num_nodata4 == 0){
-			$r17 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value4}{$gid}.",".join(",", @Geno4)."\n";
+			$r17 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$hgeneinfo->{hist_value4}{$gid}.",".join(",", @Geno4)."\n";
 			$r17_nmatrix .= $gid.",".join(",", @Geno4)."\n";
+			$r11C .= $gid.",promoter,".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$hgeneinfo->{hist_value4}{$gid}.",".join(",", @Geno4)."\n";
+			$r11C_nmatrix .= $gid."_promoter,".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$cumpos_p.",".join(",", @Geno4)."\n";
+			
+			my $hrzval = Calc_normalizedvals(\@Geno4);
+			my $Geno4R = $hrzval->{R};
+			my $Geno4N = $hrzval->{N};
+			my $Geno4Z = $hrzval->{Z};
+			my $Geno4L = $hrzval->{L};
+			my $Geno4RZ = $hrzval->{RZ};
+			my $Geno4RL = $hrzval->{RL};
+			$r11CR_nmatrix .= $gid."_promoter,".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$cumpos_p.",".join(",", @{$Geno4R})."\n";
+			$r11CN_nmatrix .= $gid."_promoter,".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$cumpos_p.",".join(",", @{$Geno4N})."\n";
+			$r11CZ_nmatrix .= $gid."_promoter,".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$cumpos_p.",".join(",", @{$Geno4Z})."\n";
+			$r11CL_nmatrix .= $gid."_promoter,".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$cumpos_p.",".join(",", @{$Geno4L})."\n";
+			$r11CRZ_nmatrix .= $gid."_promoter,".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$cumpos_p.",".join(",", @{$Geno4RZ})."\n";
+			$r11CRL_nmatrix .= $gid."_promoter,".$gid_seqid.",".$hginfo->{$gid}{pos0_p}.",".$hginfo->{$gid}{pos1_p}.",".$cumpos_p.",".join(",", @{$Geno4RL})."\n";
 			$hgeneclass->{prom_1cnsv}{$gid} = 1;
 			$cnt_geno17++;
 		}
 		if($num_conserved_utr3 > 0 && $num_nonzero5 > 0 && $num_nodata5 == 0){
-			$r19 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value5}{$gid}.",".join(",", @Geno5)."\n";
+			$r19 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$hgeneinfo->{hist_value5}{$gid}.",".join(",", @Geno5)."\n";
 			$r19_nmatrix .= $gid.",".join(",", @Geno5)."\n";
+			$r11C .= $gid.",utr,".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$hgeneinfo->{hist_value5}{$gid}.",".join(",", @Geno5)."\n";
+			$r11C_nmatrix .= $gid."_utr,".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$cumpos_u.",".join(",", @Geno5)."\n";
+			
+			my $hrzval = Calc_normalizedvals(\@Geno5);
+			my $Geno5R = $hrzval->{R};
+			my $Geno5N = $hrzval->{N};
+			my $Geno5Z = $hrzval->{Z};
+			my $Geno5L = $hrzval->{L};
+			my $Geno5RZ = $hrzval->{RZ};
+			my $Geno5RL = $hrzval->{RL};
+			$r11CR_nmatrix .= $gid."_utr,".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$cumpos_u.",".join(",", @{$Geno5R})."\n";
+			$r11CN_nmatrix .= $gid."_utr,".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$cumpos_u.",".join(",", @{$Geno5N})."\n";
+			$r11CZ_nmatrix .= $gid."_utr,".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$cumpos_u.",".join(",", @{$Geno5Z})."\n";
+			$r11CL_nmatrix .= $gid."_utr,".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$cumpos_u.",".join(",", @{$Geno5L})."\n";
+			$r11CRZ_nmatrix .= $gid."_utr,".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$cumpos_u.",".join(",", @{$Geno5RZ})."\n";
+			$r11CRL_nmatrix .= $gid."_utr,".$gid_seqid.",".$hginfo->{$gid}{pos0_u}.",".$hginfo->{$gid}{pos1_u}.",".$cumpos_u.",".join(",", @{$Geno5RL})."\n";
 			$hgeneclass->{utr3_1cnsv}{$gid} = 1;
 			$cnt_geno19++;
 		}
 		
 		if(! $hjudge->{false}){			# may be removed
 			if($num_nonzero1 > 0 && $num_nodata1 == 0){
-				$r3 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1}{$gid}.",".join(",", @Geno1)."\n";
+				$r3 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value1}{$gid}.",".join(",", @Geno1)."\n";
 				$hgeneclass->{val_allgeno}{$gid} = 1;
 				$cnt_geno3++;
 			}
 			if($num_nonzero2 > 0){
-				$r4 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno2)."\n";
+				$r4 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",-,-,-,-,".join(",", @Geno2)."\n";
 				$hgeneclass->{raw_allgeno}{$gid} = 1;
 				$cnt_geno4++;
 			}
 			if($num_nonzero3 > 0 && $num_nodata3 == 0 && $failprot_refgenome == 0){
-				$r6 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
+				$r6 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value3}{$gid}.",".join(",", @Geno3)."\n";
 				$hgeneclass->{prot_allgeno}{$gid} = 1;
 				$cnt_geno6++;
 			}
 			if($num_nonzero4 > 0 && $num_nodata4 == 0){
-				$r8 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value4}{$gid}.",".join(",", @Geno4)."\n";
+				$r8 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value4}{$gid}.",".join(",", @Geno4)."\n";
 				$hgeneclass->{prom_allgeno}{$gid} = 1;
 				$cnt_geno8++;
 			}
 			if($num_nonzero5 > 0 && $num_nodata5 == 0){
-				$r10 .= $gid.",".$hginfo->{$gid}{Chr}.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value5}{$gid}.",".join(",", @Geno5)."\n";
+				$r10 .= $gid.",".$gid_seqid.",".$hginfo->{$gid}{pos0}.",".$hginfo->{$gid}{pos1}.",".$hgeneinfo->{hist_value5}{$gid}.",".join(",", @Geno5)."\n";
 				$hgeneclass->{utr3_allgeno}{$gid} = 1;
 				$cnt_geno10++;
 			}
@@ -972,55 +1247,80 @@ foreach my $gid (@GID2){
 }
 
 my $dir = "combined_asm2sv";
+if($prefix){
+	$dir .= "_".$prefix;
+}
 unless(-e $dir){
 	system("mkdir $dir");
 }
 
-my $rfile1 = "$dir/val_disrupt_q-".$nsample.".csv";
-my $rfile1B = "$dir/val_indel_q-".$nsample.".csv";
+my $rfile1 = "$dir/gene_disrupt_q-".$nsample.".csv";
+my $rfile1B = "$dir/gene_indel_q-".$nsample.".csv";
 my $rfile2 = "$dir/raw_q-".$nsample.".csv";
-my $rfile3 = "$dir/val_disrupt_allgeno_q-".$nsample.".csv";
+my $rfile3 = "$dir/gene_disrupt_allgeno_q-".$nsample.".csv";
 my $rfile4 = "$dir/raw_allgeno_q-".$nsample.".csv";
-my $rfile5 = "$dir/prot_q-".$nsample.".csv";
+my $rfile5 = "$dir/protein_q-".$nsample.".csv";
 my $rfile7 = "$dir/promoter_indel_q-".$nsample.".csv";
 my $rfile9 = "$dir/3UTR_indel_q-".$nsample.".csv";
-my $rfile6 = "$dir/prot_allgeno_q-".$nsample.".csv";
+my $rfile6 = "$dir/protein_allgeno_q-".$nsample.".csv";
 my $rfile8 = "$dir/promoter_indel_allgeno_q-".$nsample.".csv";
 my $rfile10 = "$dir/3UTR_indel_allgeno_q-".$nsample.".csv";
-my $rfile11 = "$dir/val_disrupt_1cnsv_q-".$nsample.".csv";
-my $rfile11B = "$dir/val_indel_1cnsv_q-".$nsample.".csv";
+my $rfile11 = "$dir/gene_disrupt_1cnsv_q-".$nsample.".csv";
+my $rfile11B = "$dir/gene_indel_1cnsv_q-".$nsample.".csv";
+my $rfile11C = "$dir/all_indel_1cnsv_q-".$nsample.".csv";
 my $rfile12 = "$dir/raw_1cnsv_q-".$nsample.".csv";
-my $rfile15 = "$dir/prot_1cnsv_q-".$nsample.".csv";
+my $rfile15 = "$dir/protein_1cnsv_q-".$nsample.".csv";
 my $rfile17 = "$dir/promoter_indel_1cnsv_q-".$nsample.".csv";
 my $rfile19 = "$dir/3UTR_indel_1cnsv_q-".$nsample.".csv";
-my $rfile1l = "$dir/val_disrupt_q-".$nsample."_less500.csv";
+my $rfile1l = "$dir/gene_disrupt_q-".$nsample."_less500.csv";
 my $rfile2l = "$dir/raw_q-".$nsample."_less500.csv";
-my $rfile5l = "$dir/prot_q-".$nsample."_less500.csv";
+my $rfile5l = "$dir/protein_q-".$nsample."_less500.csv";
 my $rfile7l = "$dir/promoter_indel_q-".$nsample."_less500.csv";
 my $rfile9l = "$dir/3UTR_indel_q-".$nsample."_less500.csv";
-my $rfile3l = "$dir/val_disrupt_allgeno_q-".$nsample."_less500.csv";
+my $rfile3l = "$dir/gene_disrupt_allgeno_q-".$nsample."_less500.csv";
 my $rfile4l = "$dir/raw_allgeno_q-".$nsample."_less500.csv";
-my $rfile6l = "$dir/prot_allgeno_q-".$nsample."_less500.csv";
+my $rfile6l = "$dir/protein_allgeno_q-".$nsample."_less500.csv";
 my $rfile8l = "$dir/promoter_indel_allgeno_q-".$nsample."_less500.csv";
 my $rfile10l = "$dir/3UTR_indel_allgeno_q-".$nsample."_less500.csv";
-my $rfile11l = "$dir/val_disrupt_1cnsv_q-".$nsample."_less500.csv";
+my $rfile11l = "$dir/gene_disrupt_1cnsv_q-".$nsample."_less500.csv";
 my $rfile12l = "$dir/raw_1cnsv_q-".$nsample."_less500.csv";
-my $rfile15l = "$dir/prot_1cnsv_q-".$nsample."_less500.csv";
+my $rfile15l = "$dir/protein_1cnsv_q-".$nsample."_less500.csv";
 my $rfile17l = "$dir/promoter_indel_1cnsv_q-".$nsample."_less500.csv";
 my $rfile19l = "$dir/3UTR_indel_1cnsv_q-".$nsample."_less500.csv";
 my $rginfo = "$dir/geneinfo_q-".$nsample.".csv";
-my $rfile11_nmatrix = "$dir/val_disrupt_1cnsv_q-".$nsample."_num-matrix.csv";
-my $rfile11B_nmatrix = "$dir/val_indel_1cnsv_q-".$nsample."_num-matrix.csv";
-my $rfile11V_nmatrix = "$dir/forClust_indel_1cnsv_q-".$nsample."_native.csv";
-my $rfile11R_nmatrix = "$dir/forClust_indel_1cnsv_q-".$nsample."_relative.csv";
-my $rfile11N_nmatrix = "$dir/forClust_indel_1cnsv_q-".$nsample."_averaged.csv";
-my $rfile11L_nmatrix = "$dir/forClust_indel_1cnsv_q-".$nsample."_log.csv";
-my $rfile11Z_nmatrix = "$dir/forClust_indel_1cnsv_q-".$nsample."_zscore.csv";
-my $rfile11RL_nmatrix = "$dir/forClust_indel_1cnsv_q-".$nsample."_log-relative.csv";
-my $rfile11RZ_nmatrix = "$dir/forClust_indel_1cnsv_q-".$nsample."_zscore-relative.csv";
-my $rfile15_nmatrix = "$dir/prot_1cnsv_q-".$nsample."_num-matrix.csv";
+#-------------------------------
+my $rfile11_nmatrix = "$dir/gene_disrupt_1cnsv_q-".$nsample."_num-matrix.csv";
+my $rfile11B_nmatrix = "$dir/gene_indel_1cnsv_q-".$nsample."_num-matrix.csv";
+my $rfile11V_nmatrix = "$dir/forClust_gene_indel_1cnsv_q-".$nsample."_native.csv";
+my $rfile11R_nmatrix = "$dir/forClust_gene_indel_1cnsv_q-".$nsample."_relative.csv";
+my $rfile11N_nmatrix = "$dir/forClust_gene_indel_1cnsv_q-".$nsample."_averaged.csv";
+my $rfile11L_nmatrix = "$dir/forClust_gene_indel_1cnsv_q-".$nsample."_log.csv";
+my $rfile11Z_nmatrix = "$dir/forClust_gene_indel_1cnsv_q-".$nsample."_zscore.csv";
+my $rfile11RL_nmatrix = "$dir/forClust_gene_indel_1cnsv_q-".$nsample."_log-relative.csv";
+my $rfile11RZ_nmatrix = "$dir/forClust_gene_indel_1cnsv_q-".$nsample."_zscore-relative.csv";
+#-------------------------------
+my $rfile11C_nmatrix = "$dir/all_indel_1cnsv_q-".$nsample."_num-matrix.csv";
+my $rfile11CV_nmatrix = "$dir/forClust_all_indel_1cnsv_q-".$nsample."_native.csv";
+my $rfile11CR_nmatrix = "$dir/forClust_all_indel_1cnsv_q-".$nsample."_relative.csv";
+my $rfile11CN_nmatrix = "$dir/forClust_all_indel_1cnsv_q-".$nsample."_averaged.csv";
+my $rfile11CL_nmatrix = "$dir/forClust_all_indel_1cnsv_q-".$nsample."_log.csv";
+my $rfile11CZ_nmatrix = "$dir/forClust_all_indel_1cnsv_q-".$nsample."_zscore.csv";
+my $rfile11CRL_nmatrix = "$dir/forClust_all_indel_1cnsv_q-".$nsample."_log-relative.csv";
+my $rfile11CRZ_nmatrix = "$dir/forClust_all_indel_1cnsv_q-".$nsample."_zscore-relative.csv";
+#-------------------------------
+my $rfile11G_nmatrix = "$dir/protein-gene_indel_1cnsv_q-".$nsample."_num-matrix.csv";
+my $rfile11GV_nmatrix = "$dir/forClust_protein-gene_indel_1cnsv_q-".$nsample."_native.csv";
+my $rfile11GR_nmatrix = "$dir/forClust_protein-gene_indel_1cnsv_q-".$nsample."_relative.csv";
+my $rfile11GN_nmatrix = "$dir/forClust_protein-gene_indel_1cnsv_q-".$nsample."_averaged.csv";
+my $rfile11GL_nmatrix = "$dir/forClust_protein-gene_indel_1cnsv_q-".$nsample."_log.csv";
+my $rfile11GZ_nmatrix = "$dir/forClust_protein-gene_indel_1cnsv_q-".$nsample."_zscore.csv";
+my $rfile11GRL_nmatrix = "$dir/forClust_protein-gene_indel_1cnsv_q-".$nsample."_log-relative.csv";
+my $rfile11GRZ_nmatrix = "$dir/forClust_protein-gene_indel_1cnsv_q-".$nsample."_zscore-relative.csv";
+#-------------------------------
+my $rfile15_nmatrix = "$dir/protein_1cnsv_q-".$nsample."_num-matrix.csv";
 my $rfile17_nmatrix = "$dir/promoter_indel_1cnsv_q-".$nsample."_num-matrix.csv";
 my $rfile19_nmatrix = "$dir/3UTR_indel_1cnsv_q-".$nsample."_num-matrix.csv";
+my $rgntable = "$dir/genotype_table_q-".$nsample.".csv";
 
 SAVE($rfile1, $r1);
 SAVE($rfile1B, $r1B);
@@ -1035,6 +1335,7 @@ SAVE($rfile9, $r9);
 #SAVE($rfile10, $r10);
 SAVE($rfile11, $r11);
 SAVE($rfile11B, $r11B);
+SAVE($rfile11C, $r11C);
 SAVE($rfile12, $r12);
 SAVE($rfile15, $r15);
 SAVE($rfile17, $r17);
@@ -1050,20 +1351,41 @@ SAVE($rfile12l, $r12_less500);
 SAVE($rfile15l, $r15_less500);
 SAVE($rfile17l, $r17_less500);
 SAVE($rfile19l, $r19_less500);
+#-------------------------------
 SAVE($rfile11_nmatrix, $r11_nmatrix);
+#SAVE($rfile11B_nmatrix, $r11B_nmatrix);
 SAVE($rfile11V_nmatrix, $r11B_nmatrix);
-SAVE($rfile11B_nmatrix, $r11B_nmatrix);
 SAVE($rfile11R_nmatrix, $r11R_nmatrix);
 #SAVE($rfile11N_nmatrix, $r11N_nmatrix);
 SAVE($rfile11L_nmatrix, $r11L_nmatrix);
 #SAVE($rfile11Z_nmatrix, $r11Z_nmatrix);
-SAVE($rfile11RL_nmatrix, $r11RL_nmatrix);
+#SAVE($rfile11RL_nmatrix, $r11RL_nmatrix);
 #SAVE($rfile11RZ_nmatrix, $r11RZ_nmatrix);
+#-------------------------------
+#SAVE($rfile11C_nmatrix, $r11C_nmatrix);
+SAVE($rfile11CV_nmatrix, $r11C_nmatrix);
+SAVE($rfile11CR_nmatrix, $r11CR_nmatrix);
+#SAVE($rfile11CN_nmatrix, $r11CN_nmatrix);
+SAVE($rfile11CL_nmatrix, $r11CL_nmatrix);
+#SAVE($rfile11CZ_nmatrix, $r11CZ_nmatrix);
+#SAVE($rfile11CRL_nmatrix, $r11CRL_nmatrix);
+#SAVE($rfile11CRZ_nmatrix, $r11CRZ_nmatrix);
+#-------------------------------
+#SAVE($rfile11G_nmatrix, $r11G_nmatrix);
+SAVE($rfile11GV_nmatrix, $r11G_nmatrix);
+SAVE($rfile11GR_nmatrix, $r11GR_nmatrix);
+#SAVE($rfile11GN_nmatrix, $r11GN_nmatrix);
+SAVE($rfile11GL_nmatrix, $r11GL_nmatrix);
+#SAVE($rfile11GZ_nmatrix, $r11GZ_nmatrix);
+#SAVE($rfile11GRL_nmatrix, $r11GRL_nmatrix);
+#SAVE($rfile11GRZ_nmatrix, $r11GRZ_nmatrix);
+#-------------------------------
 SAVE($rfile15_nmatrix, $r15_nmatrix);
 SAVE($rfile17_nmatrix, $r17_nmatrix);
 SAVE($rfile19_nmatrix, $r19_nmatrix);
 #SAVE($rginfo, $geneinfo);
 SAVE($rginfo, $r_hist);
+SAVE($rgntable, $r_gntable);
 
 my $combined_predictorf = "$dir/combined_predict_orf_q-".$nsample.".fasta";
 if(-e $combined_predictorf){
@@ -1079,11 +1401,11 @@ foreach my $tmp (@{$AoF}){
 
 if($refgenome ne 'null'){
 	if($cnt_diffchr > 0 || $cnt_trans > 0){
-		my $rfile101 = "$dir/val_disrupt_transloc_q-".$nsample.".csv";
-		my $rfile101M = "$dir/val_disrupt_1cnsv_transloc_q-".$nsample.".csv";
-		my $rfile101B = "$dir/val_indel_transloc_q-".$nsample.".csv";
+		my $rfile101 = "$dir/gene_disrupt_transloc_q-".$nsample.".csv";
+		my $rfile101M = "$dir/gene_disrupt_1cnsv_transloc_q-".$nsample.".csv";
+		my $rfile101B = "$dir/gene_indel_transloc_q-".$nsample.".csv";
 		my $rfile102 = "$dir/raw_transloc_q-".$nsample.".csv";
-		my $rfile103 = "$dir/prot_transloc_q-".$nsample.".csv";
+		my $rfile103 = "$dir/protein_transloc_q-".$nsample.".csv";
 		my $rfile104 = "$dir/promoter_indel_transloc_q-".$nsample.".csv";
 		my $rfile105 = "$dir/3UTR_indel_transloc_q-".$nsample.".csv";
 		
@@ -1096,11 +1418,11 @@ if($refgenome ne 'null'){
 		SAVE($rfile105, $r105);
 		
 		if($cnt_diffchr > 0){
-			my $rfile201 = "$dir/val_disrupt_transloc-diffchr_q-".$nsample.".csv";
-			my $rfile201M = "$dir/val_disrupt_1cnsv_transloc-diffchr_q-".$nsample.".csv";
-			my $rfile201B = "$dir/val_indel_transloc-diffchr_q-".$nsample.".csv";
+			my $rfile201 = "$dir/gene_disrupt_transloc-diffchr_q-".$nsample.".csv";
+			my $rfile201M = "$dir/gene_disrupt_1cnsv_transloc-diffchr_q-".$nsample.".csv";
+			my $rfile201B = "$dir/gene_indel_transloc-diffchr_q-".$nsample.".csv";
 			my $rfile202 = "$dir/raw_transloc-diffchr_q-".$nsample.".csv";
-			my $rfile203 = "$dir/prot_transloc-diffchr_q-".$nsample.".csv";
+			my $rfile203 = "$dir/protein_transloc-diffchr_q-".$nsample.".csv";
 			my $rfile204 = "$dir/promoter_indel_transloc-diffchr_q-".$nsample.".csv";
 			my $rfile205 = "$dir/3UTR_indel_transloc-diffchr_q-".$nsample.".csv";
 			my $rfile201i = "$dir/info_indel_transloc-diffchr_q-".$nsample.".csv";
@@ -1115,11 +1437,11 @@ if($refgenome ne 'null'){
 			SAVE($rfile201i, $r201i);
 		}
 		if($cnt_trans > 0){
-			my $rfile301 = "$dir/val_disrupt_transloc-samechr_q-".$nsample.".csv";
-			my $rfile301M = "$dir/val_disrupt_1cnsv_transloc-samechr_q-".$nsample.".csv";
-			my $rfile301B = "$dir/val_indel_transloc-samechr_q-".$nsample.".csv";
+			my $rfile301 = "$dir/gene_disrupt_transloc-samechr_q-".$nsample.".csv";
+			my $rfile301M = "$dir/gene_disrupt_1cnsv_transloc-samechr_q-".$nsample.".csv";
+			my $rfile301B = "$dir/gene_indel_transloc-samechr_q-".$nsample.".csv";
 			my $rfile302 = "$dir/raw_transloc-samechr_q-".$nsample.".csv";
-			my $rfile303 = "$dir/prot_transloc-samechr_q-".$nsample.".csv";
+			my $rfile303 = "$dir/protein_transloc-samechr_q-".$nsample.".csv";
 			my $rfile304 = "$dir/promoter_indel_transloc-samechr_q-".$nsample.".csv";
 			my $rfile305 = "$dir/3UTR_indel_transloc-samechr_q-".$nsample.".csv";
 			
@@ -1135,13 +1457,29 @@ if($refgenome ne 'null'){
 }
 
 if($cnt_geno11 > 0){
-	R_PCAplot($data_path, $rfile11V_nmatrix, "native");
-	R_PCAplot($data_path, $rfile11R_nmatrix, "relative");
-#	R_PCAplot($data_path, $rfile11N_nmatrix, "averaged");
-	R_PCAplot($data_path, $rfile11L_nmatrix, "log2-transformed[native]");
-#	R_PCAplot($data_path, $rfile11Z_nmatrix, "zscore");
-	R_PCAplot($data_path, $rfile11RL_nmatrix, "log2-transformed[relative]");
-#	R_PCAplot($data_path, $rfile11RZ_nmatrix, "zscore-relative");
+	R_PCAplot($data_path, $rfile11V_nmatrix, "native", $nsample);
+	R_PCAplot($data_path, $rfile11R_nmatrix, "relative", $nsample);
+#	R_PCAplot($data_path, $rfile11N_nmatrix, "averaged", $nsample);
+	R_PCAplot($data_path, $rfile11L_nmatrix, "log2-transformed[native]", $nsample);
+#	R_PCAplot($data_path, $rfile11Z_nmatrix, "zscore", $nsample);
+#	R_PCAplot($data_path, $rfile11RL_nmatrix, "log2-transformed[relative]", $nsample);
+#	R_PCAplot($data_path, $rfile11RZ_nmatrix, "zscore-relative", $nsample);
+
+	R_PCAplot($data_path, $rfile11CV_nmatrix, "native", $nsample);
+	R_PCAplot($data_path, $rfile11CR_nmatrix, "relative", $nsample);
+#	R_PCAplot($data_path, $rfile11CN_nmatrix, "averaged", $nsample);
+	R_PCAplot($data_path, $rfile11CL_nmatrix, "log2-transformed[native]", $nsample);
+#	R_PCAplot($data_path, $rfile11CZ_nmatrix, "zscore", $nsample);
+#	R_PCAplot($data_path, $rfile11CRL_nmatrix, "log2-transformed[relative]", $nsample);
+#	R_PCAplot($data_path, $rfile11CRZ_nmatrix, "zscore-relative", $nsample);
+
+	R_PCAplot($data_path, $rfile11GV_nmatrix, "native", $nsample);
+	R_PCAplot($data_path, $rfile11GR_nmatrix, "relative", $nsample);
+#	R_PCAplot($data_path, $rfile11GN_nmatrix, "averaged", $nsample);
+	R_PCAplot($data_path, $rfile11GL_nmatrix, "log2-transformed[native]", $nsample);
+#	R_PCAplot($data_path, $rfile11GZ_nmatrix, "zscore", $nsample);
+#	R_PCAplot($data_path, $rfile11GRL_nmatrix, "log2-transformed[relative]", $nsample);
+#	R_PCAplot($data_path, $rfile11GRZ_nmatrix, "zscore-relative", $nsample);
 }
 
 if($zip){
@@ -1165,6 +1503,7 @@ sub R_PCAplot{
 my $data_path = shift;
 my $file0 = shift;
 my $description = shift;
+my $num_sample = shift;
 
 my $R_file0 = $file0;
 $R_file0 =~ s/\.csv/_0\.txt/;
@@ -1174,24 +1513,36 @@ my $img_file1 = $file0;
 my $img_file2 = $file0;
 my $img_file3 = $file0;
 my $img_file4 = $file0;
+$img_file0 =~ s/forClust_/plotClust_/;
+$img_file1 =~ s/forClust_/plotClust_/;
+$img_file2 =~ s/forClust_/plotClust_/;
+$img_file3 =~ s/forClust_/plotClust_/;
+$img_file4 =~ s/forClust_/plotClust_/;
 $img_file0 =~ s/\.csv/_PCAplot\.png/;
 $img_file1 =~ s/\.csv/_flushclust\.png/;
 $img_file2 =~ s/\.csv/_flushclust_hang\.png/;
 $img_file3 =~ s/\.csv/_hclust\.png/;
 $img_file4 =~ s/\.csv/_hclust_hang\.png/;
 
-my $script0 =<<EOS;
+my $spcols = "5";
+if($num_sample > 1){
+	$num_sample += 4;
+	$spcols = "5:".$num_sample;
+}
+
+my $script0 =<<"EOS";
 library(stats)
 workingDir = "$data_path"
 setwd(workingDir)
 EOS
 
-$script0 .=<<EOS;
+$script0 .=<<"EOS";
 #----------------------flashclust----------------------#
 library(WGCNA)
 library(flashClust)
 options(stringsAsFactors = FALSE)
 Data <- read.csv("$file0", header=T, row.names=1)
+Data <- Data[, $spcols ]
 datExpr <- as.data.frame(t(Data))
 sampleTree <- flashClust(dist(datExpr), method = "complete")
 sizeGrWindow(12,9)
@@ -1200,6 +1551,9 @@ par(mar = c(0,4,2,0))
 png("$img_file1", width=3000, height=1200)
 plot(sampleTree, main = "Sample clustering, $description (flashClust)", sub="", xlab="", cex.lab = 1.5, cex.axis = 1.5, cex.main = 2)
 dev.off()
+EOS
+
+my $disabled =<<"EOS";
 png("$img_file2", width=3000, height=1200)
 plot(sampleTree, hang=-1, main = "Sample clustering, $description (flashClust)", sub="", xlab="", cex.lab = 1.5, cex.axis = 1.5, cex.main = 2)
 dev.off()
@@ -1353,15 +1707,23 @@ while(my $line = <$fh>){
 	}
 	
 	# example of chrinfo (tsv)
-	#	prefix		convert_ID	original_ID
-	#	Gmax_189	chr01		Gm01
-	#	Gmax_189	chr02		Gm02
-	#	Gmax_189	chr03		Gm03
+	#	prefix		convert_ID	original_ID		alias_prefix		norder
+	#	Gmax_189	chr01		Gm01			Williams82_189		10
+	#	Gmax_189	chr02		Gm02			Williams82_189		10
+	#	Gmax_189	chr03		Gm03			Williams82_189		10
 	
 	my @A = split(/\t/, $line);
 	my @B = split(/,/, $A[2]);
-	$hash->{$A[0]}{$A[2]} = $A[1];
-	$hash->{$A[0]}{$B[0]} = $A[1];
+	$hash->{seqID}{$A[0]}{$A[2]} = $A[1];
+	$hash->{seqID}{$A[0]}{$B[0]} = $A[1];
+	
+	if(defined $A[3] && ! $hash->{alias_name}{$A[0]} && $A[3] ne '-' && $A[3] ne 'NA' && $A[3] ne 'na' && $A[3] ne '0'){
+		$hash->{alias_name}{$A[0]} = $A[3];
+	}
+	if(defined $A[4] && ! $hash->{norder}{$A[0]} && $A[4] ne '-' && $A[4] ne 'NA' && $A[4] ne 'na' && $A[4] ne '0'){
+		$hash->{norder}{$A[0]} = $A[4];
+		$hash->{norder_status} = 1;
+	}
 #	print "$A[0] $B[0] $A[1]\n";
 	$cnt++;
 }
@@ -1431,49 +1793,121 @@ my $A = shift;
 
 my $hash = {};
 foreach my $val (@{$A}){
-	for(my $i = 0; $i <= 2; $i += 0.6){
-		my $p0 = $i;
-		my $p1 = $i + 0.6;
-		
-		if($i < 1){
-			if($p0 <= $val && $val < $p1){
-				$hash->{$p0} += 1;
-				last;
-			}
-		}
-		else{
-			if($p0 <= $val){
-				$hash->{$p0} += 1;
-				last;
-			}
-		}
+	if(0 <= $val && $val < 0.6){
+		$hash->{C0} += 1;
+	}
+	elsif(0.6 <= $val && $val < 1.2){
+		$hash->{C1} += 1;
+	}
+	elsif(1.2 <= $val && $val < 1.8){
+		$hash->{C2} += 1;
+	}
+	elsif(1.8 <= $val){
+		$hash->{C3} += 1;
 	}
 }
 
 my @Hist;
 my @Header;
-for(my $i = 0; $i <= 2; $i += 0.6){
-	my $p0 = $i;
-	my $p1 = $i + 0.6;
-	if($i < 1){
-		push(@Header, "$p0 - $p1");
-	}
-	else{
-		push(@Header, "$p0 -");
-	}
-	
-	if($hash->{$p0}){
-		push(@Hist, $hash->{$p0});
-	}
-	else{
-		push(@Hist, 0);
-	}
+push(@Header, "0 - 0.6");
+push(@Header, "0.6 - 1.2");
+push(@Header, "1.2 - 1.8");
+push(@Header, "1.8 -");
+
+if(defined $hash->{C0}){
+	push(@Hist, $hash->{C0});
+}
+else{
+	push(@Hist, 0);
+}
+if(defined $hash->{C1}){
+	push(@Hist, $hash->{C1});
+}
+else{
+	push(@Hist, 0);
+}
+if(defined $hash->{C2}){
+	push(@Hist, $hash->{C2});
+}
+else{
+	push(@Hist, 0);
+}
+if(defined $hash->{C3}){
+	push(@Hist, $hash->{C3});
+}
+else{
+	push(@Hist, 0);
 }
 
 my $hist = join(",", @Hist);
 my $header = join(",", @Header);
 
 return ($hist, $header);
+}
+
+
+#-------------------------------------------------------------------------------
+sub Array2histcsv3{
+my $A = shift;
+
+my $hash = {};
+foreach my $val (@{$A}){
+	if(defined $val){
+		$hash->{$val} += 1;
+	}
+}
+
+my @NR = keys(%{$hash});
+@NR = sort {$a cmp $b} @NR;
+
+my @NR2;
+foreach my $val (@NR){
+	if($val eq 'Ref'){
+		push(@NR2, $val);
+	}
+}
+foreach my $val (@NR){
+	if($val ne 'Ref'){
+		push(@NR2, $val);
+	}
+}
+
+my $AoA = [];
+my $ngeno = 0;
+my $ngeno_sample = 0;
+my @items;
+foreach my $val (@NR2){
+	if($val ne '-'){
+		my $str = $val."=".$hash->{$val};
+		push(@items, $str);
+		
+		my @tmp;
+		push(@tmp, $val);
+		push(@tmp, $hash->{$val});
+		push(@{$AoA}, \@tmp);
+		$ngeno++;
+		$ngeno_sample += $hash->{$val};
+	}
+	else{
+		my $str = "NA=".$hash->{$val};
+		push(@items, $str);
+	}
+}
+
+@{$AoA} = sort {$a->[1] <=> $b->[1]} @{$AoA};
+my $nminor_sample = $AoA->[0][1];
+my $nminor_ratio = $nminor_sample / $ngeno_sample;
+if($ngeno == 1){
+	$nminor_sample = "-";
+	$nminor_ratio = "-";
+}
+
+#my $header = "num_genotype,num_minor,ratio_minor,info";
+my $gnstat = join("\;", @items);
+#my $r = $ngeno.",".$nminor_sample.",".$nminor_ratio.",".$gnstat;
+my $r = $ngeno.",".$nminor_ratio.",".$gnstat;
+
+return $r;
 }
 
 
@@ -1555,6 +1989,7 @@ if(-e $file){
 							$tmp1[0] =~ s/\s//g;
 							if($tmp1[0] =~ /\d/ && $tmp1[0] !~ /\D/){
 								$neighbor_tlen = $tmp1[0];
+								$hash->{neighbor_tlen}{$neighbor_tlen} += 1;
 							}
 						}
 					}
@@ -1571,6 +2006,8 @@ if(-e $file){
 			my $promoter = $A[25];
 			my $utr3 = $A[27];
 			my $id = $A[7];
+			my $gntype_promoter = "-";
+			my $gntype_utr = "-";
 			
 			unless($A[32]){
 				next;
@@ -1592,6 +2029,42 @@ if(-e $file){
 				else{
 					$promoter = $tmpA[0];
 				}
+				
+				my $disrupt_promoter = $promoter;
+				if($promoter > 1){
+					$disrupt_promoter = 1 / $promoter;
+				}
+				
+				if($disrupt_promoter >= 0.98){
+					$gntype_promoter = "Ref";
+				}
+				if($disrupt_promoter >= 0.98){
+					$gntype_promoter = "Ref";
+				}
+				elsif($disrupt_promoter >= 0.90){
+					if($promoter > 1){
+						$gntype_promoter = "A1";
+					}
+					else{
+						$gntype_promoter = "C1";
+					}
+				}
+				elsif($disrupt_promoter >= 0.80){
+					if($promoter > 1){
+						$gntype_promoter = "A2";
+					}
+					else{
+						$gntype_promoter = "C2";
+					}
+				}
+				else{
+					if($promoter > 1){
+						$gntype_promoter = "B";
+					}
+					else{
+						$gntype_promoter = "D";
+					}
+				}
 			}
 			if($utr3 =~ /\;/){
 				# ratio_hit; ratio_span; rev_ratio_span; P2Gdist; span_pos0; span_pos1
@@ -1605,6 +2078,39 @@ if(-e $file){
 				else{
 					$utr3 = $tmpA[0];
 				}
+				
+				my $disrupt_utr = $utr3;
+				if($utr3 > 1){
+					$disrupt_utr = 1 / $utr3;
+				}
+				
+				if($disrupt_utr >= 0.98){
+					$gntype_utr = "Ref";
+				}
+				elsif($disrupt_utr >= 0.90){
+					if($utr3 > 1){
+						$gntype_utr = "A1";
+					}
+					else{
+						$gntype_utr = "C1";
+					}
+				}
+				elsif($disrupt_utr >= 0.80){
+					if($utr3 > 1){
+						$gntype_utr = "A2";
+					}
+					else{
+						$gntype_utr = "C2";
+					}
+				}
+				else{
+					if($utr3 > 1){
+						$gntype_utr = "B";
+					}
+					else{
+						$gntype_utr = "D";
+					}
+				}
 			}
 			
 	#		my $sv2 = $sv;					# value representing deletion and insertion separately: [0] < deletion < [1.0] < insertion < [2.0]
@@ -1613,6 +2119,7 @@ if(-e $file){
 			my $hitspan_woN = $A[17];
 			my $bpinsert = $A[18];
 			
+			my $gntype = "-";
 			my $sv = "-";
 			my $sv2 = "-";
 			my $sv3 = "-";
@@ -1642,6 +2149,34 @@ if(-e $file){
 					$sv2 = $alnspan_ratio;
 					$sv3 = $aln_ratio;
 				}
+				
+				if($sv >= 0.98){
+					$gntype = "Ref";
+				}
+				elsif($sv >= 0.90){
+					if($sv2 > 1){
+						$gntype = "A1";
+					}
+					else{
+						$gntype = "C1";
+					}
+				}
+				elsif($sv >= 0.80){
+					if($sv2 > 1){
+						$gntype = "A2";
+					}
+					else{
+						$gntype = "C2";
+					}
+				}
+				else{
+					if($sv2 > 1){
+						$gntype = "B";
+					}
+					else{
+						$gntype = "D";
+					}
+				}
 			}
 			
 			if($refgenome ne 'null' && $refgenome eq $id){
@@ -1650,6 +2185,9 @@ if(-e $file){
 				$hash->{refpos1}{$id}{$gid} = $A[6];
 			}
 			
+			$hash->{gntype}{$id}{$gid} = $gntype;
+			$hash->{gntype_promoter}{$id}{$gid} = $gntype_promoter;
+			$hash->{gntype_utr}{$id}{$gid} = $gntype_utr;
 			$hash->{sv}{$id}{$gid} = $sv;
 			$hash->{sv2}{$id}{$gid} = $sv2;
 			$hash->{svprom}{$id}{$gid} = $promoter;
@@ -1792,6 +2330,211 @@ if(-e $file){
 	}
 	close $fh;
 }
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Stats_fasta{
+my $file = shift;
+
+print "! reading refseq [$file]...\n";
+open(my $fh, "<", $file) or die;
+my $hash = {};
+my $cnt = 0;
+my $ID;
+my $seq;
+my $total_len = 0;
+my @SID;
+my @SID_ori;
+my $norder = 0;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	my @A = split(/\t/, $line);
+	if($line =~ /\>/){
+		unless($cnt == 0){
+			if($hash->{$ID}){
+				print "! duplicated seq ID : [$ID]\n";
+			}
+			
+#			if($ID !~ /scaffold/ && $ID !~ /mitoch/ && $ID !~ /chloro/){
+				my $len = length($seq);
+	#			my $ID_ori = $ID;
+	#			$ID =~ s/chr0//i;
+	#			$ID =~ s/chr//i;
+	#			$ID =~ s/Gm0//i;
+	#			$ID =~ s/Gm//i;
+	#			$hash->{$ID}{originalID} = $ID_ori;
+				$hash->{$ID}{order} = $norder;
+	#			$hash->{$ID}{seq} = $seq;
+				$hash->{$ID}{len} = $len;
+				$hash->{$ID}{cumlen0} = $total_len;
+	#			$hash->{$ID_ori}{cumlen0} = $total_len;
+				$total_len += $len;
+				$hash->{$ID}{cumlen1} = $total_len;
+	#			$hash->{$ID_ori}{cumlen1} = $total_len;
+				push(@SID, $ID);
+	#			push(@SID_ori, $ID_ori);
+				$norder++;
+				print " [$ID] = [$len] bp\n";
+#			}
+		}
+		
+		$ID = $line;
+		$ID =~ s/\>//;
+		my @tmp = split(/\s/, $ID);
+		$ID = $tmp[0];
+		$seq = "";
+		$cnt++;
+	}
+	else{
+		$line =~ s/\.//g;
+		if($line){
+			$seq .= $line;
+		}
+	}
+}
+close $fh;
+
+if($seq){
+	if($hash->{$ID}){
+		print "! duplicated seq ID : [$ID]\n";
+	}
+	
+#	if($ID !~ /scaffold/ && $ID !~ /mitoch/ && $ID !~ /chloro/){
+		my $len = length($seq);
+#		my $ID_ori = $ID;
+#		$ID =~ s/chr0//i;
+#		$ID =~ s/chr//i;
+#		$ID =~ s/Gm0//i;
+#		$ID =~ s/Gm//i;
+#		$hash->{$ID}{originalID} = $ID_ori;
+		$hash->{$ID}{order} = $norder;
+#		$hash->{$ID}{seq} = $seq;
+		$hash->{$ID}{len} = $len;
+		$hash->{$ID}{cumlen0} = $total_len;
+#		$hash->{$ID_ori}{cumlen0} = $total_len;
+		$total_len += $len;
+		$hash->{$ID}{cumlen1} = $total_len;
+#		$hash->{$ID_ori}{cumlen1} = $total_len;
+		push(@SID, $ID);
+#		push(@SID_ori, $ID_ori);
+		$norder++;
+		print " [$ID] = [$len] bp\n";
+#	}
+}
+
+my $numID = @SID;
+$hash->{SID} = \@SID;
+#$hash->{SID_ori} = \@SID_ori;
+$hash->{total_len} = $total_len;
+
+print "! total [$numID] sequence ID, [$total_len] bp\n";
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Gff_to_hash{
+my $gff3 = shift;
+
+print "! reading [$gff3]...\n";
+open(my $fh, "<", $gff3) or die;
+my $hash = {};
+my $cnt = 0;
+my $gcnt = 0;
+my $tcnt = 0;
+my $pcnt = 0;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	$line =~ s/\"//g;
+	
+	if($line =~ /\#/){
+		next;
+	}
+	
+	my @A = split(/\t/, $line);
+	unless($A[8]){
+		next;
+	}
+	my @tag = split(/\;/, $A[8]);
+	my $gid;
+	my $tid;
+	my $name_evm;
+	$cnt++;
+	
+	if($A[0] =~ /scaffold/ || $A[0] =~ /unanchored/ || $A[0] =~ /mitochon/ || $A[0] =~ /chloro/){
+#	if($A[0] =~ /mitochon/ || $A[0] =~ /chloro/){
+		next;
+	}
+	
+	if($A[2] eq 'gene'){
+		foreach my $val (@tag){
+			if($val =~ /ID\=/ && $val !~ /Alt_ID\=/){
+				$gid = $val;
+				$gid =~ s/ID\=//;
+			}
+			elsif($val =~ /Name\=EVM/){
+				$name_evm = $val;
+				$name_evm =~ s/Name\=EVM//;
+			}
+		}
+		
+#		if($name_evm){
+#			$A[8] = "ID\=".$gid.";Note\=EVM";
+#		}
+#		else{
+			$A[8] = "ID\=".$gid;
+#		}
+		
+		if($gid){
+			$hash->{hgff}{$gid}{Chr} = $A[0];		#1	seqid
+			$hash->{hgff}{$gid}{pos0} = $A[3];		#2	pos0
+			$hash->{hgff}{$gid}{pos1} = $A[4];		#3	pos1
+			$hash->{hgff}{$gid}{strand} = $A[6];	#4	strand
+			$gcnt++;
+		}
+	}
+	elsif($A[2] eq 'mRNA' || $A[2] eq 'transcript'){
+		foreach my $val (@tag){
+			if($val =~ /ID\=/ && $val !~ /Alt_ID\=/){
+				$tid = $val;
+				$tid =~ s/ID\=//;
+			}
+			elsif($val =~ /Parent\=/){
+				$gid = $val;
+				$gid =~ s/Parent\=//;
+			}
+		}
+		
+		if($gid && $tid){
+			$hash->{t2g}{$tid} = $gid;
+			$hash->{g2t}{$gid} .= $tid."\n";
+			$tcnt++;
+		}
+	}
+	elsif($A[2] eq 'cds' || $A[2] eq 'CDS'){
+		foreach my $val (@tag){
+			if($val =~ /Parent\=/){
+				$tid = $val;
+				$tid =~ s/Parent\=//;
+			}
+		}
+		
+		if($tid){
+			$hash->{CDS}{$tid} = "true";
+			$pcnt++;
+		}
+	}
+}
+close $fh;
+
+#print "! [$gcnt] genes, [$tcnt] transcripts, [$pcnt] CDS lines\n";
+print "! [$gcnt] genes\n";
 
 return $hash;
 }
