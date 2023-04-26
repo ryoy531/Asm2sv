@@ -23,9 +23,14 @@ my $combined_qprot = shift;
 my $tmp_ralign = shift;
 my $bin_findorf = shift;
 my $i = shift;
+my $combined_qgff = shift;
 
 if(! $random_IDlist || ! $genelist){
 	goto END;
+}
+if(! $combined_qgff){
+	$combined_qgff = $combined_qprot;
+	$combined_qgff =~ s/\.fasta/\.gff/;
 }
 
 my $script_path = $FindBin::Bin;
@@ -37,6 +42,7 @@ push(@APP, "gth");
 push(@APP, "blat");
 push(@APP, "blat2hints");
 push(@APP, "matcher");
+push(@APP, "miniprot");
 
 my $hbin = {};
 foreach my $app (@APP){
@@ -151,7 +157,7 @@ for(my $j = $n0; $j < $n1; $j++){
 	#							if($sub_qseq && -e $tmp_dbprot && -e $tmp_qfasta){
 						if(-e $tmp_dbprot && -e $tmp_qfasta){
 							if(-e $bin_findorf){
-								$cmd .= "perl $bin_findorf $hbinpath->{gth} $hbinpath->{samtools} $hbinpath->{gffread} $hbinpath->{blat} $hbinpath->{blat2hints} $hbinpath->{matcher} $gid $tmp_dbprot $tmp_dbtranscript $tmp_dbcds $tmp_qfasta $tmp_qgff $tmp_qprot $tmp_align $tmpdir $qpref $combined_qprot\n";
+								$cmd .= "perl $bin_findorf $hbinpath->{gth} $hbinpath->{miniprot} $hbinpath->{samtools} $hbinpath->{gffread} $hbinpath->{blat} $hbinpath->{blat2hints} $hbinpath->{matcher} $gid $tmp_dbprot $tmp_dbtranscript $tmp_dbcds $tmp_qfasta $tmp_qgff $tmp_qprot $tmp_align $tmpdir $qpref $qpos0 $combined_qprot $combined_qgff\n";
 							}
 							else{
 								$cmd .= "if test ! -e \"$tmp_qgff\"; then\n";
@@ -229,7 +235,7 @@ my $p0 = shift;
 my $p1 = shift;
 
 if($seq){
-	my $subseq = substr($seq, $p0, $p1);
+	my $subseq = substr($seq, $p0 - 1, abs($p1 - $p0));
 	my $subfasta = ">".$id."\n".$subseq;
 	
 	unless(-e $rfile){
