@@ -14,9 +14,6 @@ $version .= "copyright: ryoichi yano [ryoichiy104\@gmail.com]\n";
 
 #-------------------------------------------------------------------------------
 
-# 同一のリファレンスfastaに紐づいた異なる2つのGFFにて、gene/transcript IDとposition(start, end)が異なるものを出力する
-# アノテーションをアップデートした際に、情報が変わった遺伝子を探す
-
 my $gff0 = shift;
 my $gff1 = shift;
 my $chrID_alias = shift;
