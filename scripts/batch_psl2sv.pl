@@ -61,10 +61,11 @@ my $cpu;
 my $cpu_gth;
 my $initspan;
 my $skip_orfsearch;
+my $redo_examine;
 my $help;
 my $test;
 
-GetOptions('--db=s' => \$dbfasta, '--gff=s' => \$dbgff, '--list=s' => \$genelist, '--query=s' => \$qfasta, '--alignpsl=s' => \$qpsl, '--chralias=s' => \$chrinfo, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--thread=i' => \$cpu, '--xthread=i' => \$cpu_gth, '--span=i' => \$initspan, '--plot' => \$outplot, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
+GetOptions('--db=s' => \$dbfasta, '--gff=s' => \$dbgff, '--list=s' => \$genelist, '--query=s' => \$qfasta, '--alignpsl=s' => \$qpsl, '--chralias=s' => \$chrinfo, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--thread=i' => \$cpu, '--xthread=i' => \$cpu_gth, '--span=i' => \$initspan, '--plot' => \$outplot, '--5' => \$redo_examine, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
 
 my $status = "OK";
 if(! $dbfasta || ! -e $dbfasta){
@@ -100,6 +101,9 @@ if($status eq 'missing'){
 }
 if($outplot){
 	print "\n! --plot is invoked\n";
+}
+if($redo_examine){
+	$skip_orfsearch = 0;
 }
 
 if(! $initspan || $initspan =~ /\D/){
@@ -164,6 +168,7 @@ push(@APP, "gth");
 push(@APP, "blat");
 push(@APP, "blat2hints");
 push(@APP, "matcher");
+push(@APP, "miniprot");
 
 my $hbin = {};
 foreach my $app (@APP){
@@ -220,9 +225,15 @@ my $combined_final = "summary_genome2sv_".$dir."_combined.tsv";
 my $rfile_final = "summary_genome2sv_".$dir."_".$qpref.".tsv";
 my $afile = "specified_region_hits_".$qpref.".tsv";
 my $ffile = "failed_ID_list_".$qpref.".tsv";
+my $redo_log = "_redo_examine.log";
+
+if($redo_examine && -e $redo_log){
+	print "! --5 is invoked, but analysis appears to be already done. skip...\n";
+	goto END;
+}
 
 print "! preparing info...\n";
-my $hID = Read_list($genelist);
+my $hID = Read_list1($genelist);
 my $hgffinfo = Read_gff($dbgff, $hID);
 my $QL = $hgffinfo->{RL};
 my $hlist = $hgffinfo->{hash};
@@ -233,6 +244,12 @@ my $hqseq = Open_fasta_as_hash($qfasta);
 
 #---------------------------------------------------------------//
 my $sw = 1;
+my $hprev_sphit = {};
+my $hprev_r1summary = {};
+$hprev_sphit->{status} = "new";
+my $rfile_hits0 = "r1_hitalign_flk-".$kbflnk."kb.tsv";
+my $rfile_hits1 = "r1_hitsummary_flk-".$kbflnk."kb.tsv";
+
 if($outplot){
 	if(-e $afile){
 		$sw = 2;
@@ -240,7 +257,28 @@ if($outplot){
 }
 else{
 	if(-e $afile){
-		$sw = 0;
+		if($redo_examine){
+			print "! found previous result...\n";
+			$hprev_sphit = Read_prev_afile($afile, 23);
+			$hprev_sphit->{status} = "redo";
+			$hprev_r1summary = Read_prev_afile($rfile_hits0, 0);
+			
+			print "! modifying query info...\n";
+			$hID = Read_list2($genelist, $hprev_sphit->{ID});
+			$hgffinfo = Read_gff($dbgff, $hID);
+			$QL = $hgffinfo->{RL};
+			$hlist = $hgffinfo->{hash};
+			$dbg2t = $hgffinfo->{g2t};
+			$dbt2g = $hgffinfo->{t2g};
+			$numQL = @{$QL};
+		}
+		if($numQL == 0){
+			print "! all queries already analyzed, skip step.1 ...\n";
+			$sw = 0;
+		}
+		else{
+			$sw = 1;
+		}
 	}
 }
 
@@ -265,9 +303,7 @@ if($sw > 0){
 	my $hits_header = "gene_id\tbase_ref\tchr\tpos0\tpos1\tflanking\tclass\tsearch_mode\tnmatches (bp)\taln_strand\thit_pos0\thit_pos1\tq_name\tq_seqID\tq_seqlen\tq_apos0\tq_apos1\tdb_name\tdb_seqID\tdb_seqlen\tdb_apos0\tdb_apos1\tblockCount\tblockSizes\tqStarts\tdbStarts\tlimit_qpos0\tlimit_qpos1\n";
 	my $summary_header = "gene_id\tbase_ref\tchr\tpos0\tpos1\tflanking\tclass\tqname\thitbp (ref-base)\thitbp (+flanking, ref-base)\tq-hitseq\thit_pos0\thit_pos1\tlimit_qpos0\tlimit_qpos1\tnum_candidate_chrs\n";
 	my $summary2_header = $header_summary."\n";
-
-	my $rfile_hits0 = "r1_hitalign_flk-".$kbflnk."kb.tsv";
-	my $rfile_hits1 = "r1_hitsummary_flk-".$kbflnk."kb.tsv";
+	
 	my $outplot_dir = "plot";
 	if($outplot && ! -e $outplot_dir){
 		system("mkdir $outplot_dir");
@@ -293,9 +329,14 @@ if($sw > 0){
 	}
 	
 	if($sw == 1){
-		SAVE($rfile_hits0, $hits, $hits_header);
-#		SAVE($rfile_hits1, $summary, $summary_header);
-		SAVE($afile, $summary2, $summary2_header);
+		if($hprev_sphit->{status} eq 'new'){
+			SAVE($afile, $summary2, $summary2_header);
+			SAVE($rfile_hits0, $hits, $hits_header);
+		}
+		elsif($hprev_sphit->{status} eq 'redo'){
+			AddNrlines($afile, $summary2, $summary2_header, $hprev_sphit->{data}, 23);
+			AddNrlines($rfile_hits0, $hits, $hits_header, $hprev_r1summary->{data}, 0);
+		}
 	}
 	SAVE($ffile, $failed_list, "");
 }
@@ -390,6 +431,17 @@ elsif(-e $afile){
 		$cpu = $max_cpu;
 	}
 	
+	if($redo_examine){
+		print "! reseting query info...\n";
+		$hID = Read_list1($genelist);
+		$hgffinfo = Read_gff($dbgff, $hID);
+		$QL = $hgffinfo->{RL};
+		$hlist = $hgffinfo->{hash};
+		$dbg2t = $hgffinfo->{g2t};
+		$dbt2g = $hgffinfo->{t2g};
+		$numQL = @{$QL};
+	}
+	
 	my $dbfai = $dbfasta.".fai";
 	my $dbtranscript = $refgenome."_transcript.fasta";
 	my $dbcds = $refgenome."_cds.fasta";
@@ -403,19 +455,20 @@ elsif(-e $afile){
 	Cmdexe_unless_seq($cmd2, $dbcds);
 	Cmdexe_unless_seq($cmd3, $dbprotein);
 	
-	print "! preparing dataset for genome threader... (may take a while)\n";
+	print "! preparing dataset for ORF search... (may take a while)\n";
 	my $tmp_ralign = "info_ralign.tsv";
 	if(-e $tmp_ralign){
 		system("rm $tmp_ralign");
 	}
 	
-	my $log_gth_hist = "log_gth_processed.txt";
-	if(-e $log_gth_hist){
-		system("rm $log_gth_hist");
+	my $log_orfsearch_hist = "log_orfsearch_processed.txt";
+	if(-e $log_orfsearch_hist){
+		system("rm $log_orfsearch_hist");
 	}
 	
 	my $combined_preplog = "./cmds/combined_preplog.txt";
 	my $combined_qprot = "predicted_".$qpref.".fasta";
+	my $combined_qgff = "predicted_".$qpref.".gff";
 	my $random_IDlist = "randomID.tsv";
 	my @G = keys(%{$hlist});
 	
@@ -423,7 +476,12 @@ elsif(-e $afile){
 	my @Gnotyet;
 	my $numQL_Gnotyet = @G;
 	my $num_prevorf = 0;
-	if(-e $rfile_final){
+	if($redo_examine && -e $rfile_final){
+		print "! --5 is invoked, once remove [$rfile_final]\n";
+		system("rm $rfile_final");
+		@Gnotyet = @G;
+	}
+	elsif(-e $rfile_final){
 		print "! found previous result [$rfile_final]\n";
 		my $hcheckorf = Check_prev_orfsearch($rfile_final);
 		$hprevr = $hcheckorf->{hash};
@@ -465,11 +523,11 @@ elsif(-e $afile){
 			system("mkdir $tmpdir");
 		}
 		
-		my $script = "cmd_gth_".$qpref."_".$i.".sh";
-		my $log_gth = "thread_gth_".$i.".log";
+		my $script = "cmd_orfsearch_".$qpref."_".$i.".sh";
+		my $log_orfsearch = "thread_orfsearch_".$i.".log";
 		push(@I1, $script);
-		push(@I4, $log_gth);
-		my $thr = threads->new(\&Batch_prepseq, $bin_prepseq4annot, $combined_preplog, $random_IDlist, $genelist, $qfasta, $dbgff, $dbfasta, $dbprotein, $dbtranscript, $dbcds, $afile, $rfile_final, $n0, $n1, $tmpdir, $log_gth, $script, $combined_qprot, $tmp_ralign, $bin_findorf, $i);
+		push(@I4, $log_orfsearch);
+		my $thr = threads->new(\&Batch_prepseq, $bin_prepseq4annot, $combined_preplog, $random_IDlist, $genelist, $qfasta, $dbgff, $dbfasta, $dbprotein, $dbtranscript, $dbcds, $afile, $rfile_final, $n0, $n1, $tmpdir, $log_orfsearch, $script, $combined_qprot, $tmp_ralign, $bin_findorf, $i, $combined_qgff);
 		push(@{$thrs1}, $thr);
 	}
 	
@@ -484,7 +542,7 @@ elsif(-e $afile){
 			goto END;
 		}
 		
-		print "! genome threader with [$cpu] threads...\n";
+		print "! ORF search with [$cpu] threads...\n";
 		my $num_I1 = @I1;
 		my $thrs2 = [];
 		for(my $i = 0; $i < $num_I1; $i++){
@@ -571,6 +629,10 @@ elsif(-e $afile){
 	Rm_files(\@I1);
 	Mv_files(\@I4, "cmds");
 	Rm_files(\@gabbage);
+	
+	if($redo_examine){
+		SAVE($redo_log, "--5 done.\n");
+	}
 }
 else{
 	print "! unable to find [$afile], no candidate found...\n";
@@ -589,26 +651,73 @@ END:{
 
 
 ################################################################################
-#-------------------------------------------------------------------------------
-sub Extract_and_save{
-my $rfile = shift;
-my $id = shift;
-my $seq = shift;
-my $p0 = shift;
-my $p1 = shift;
+#---------------------------------------------------------------------
+sub AddNrlines{
+my ($rfile, $new_hits, $header, $prev_hits, $i) = @_;
 
-if($seq){
-	my $subseq = substr($seq, $p0, $p1);
-	my $subfasta = ">".$id."\n".$subseq;
-	
-	unless(-e $rfile){
-		open(my $rfh, ">", $rfile);
-		print $rfh $subfasta;
-		close $rfh;
-	}
-	return $subseq;
+my @NL = split(/\n/, $new_hits);
+my @PL = split(/\n/, $prev_hits);
+
+my $hash = {};
+foreach my $line (@NL){
+	my @A = split(/\t/, $line);
+	$hash->{$A[$i]} = 1;
 }
 
+my $nr = $header;
+foreach my $line (@PL){
+	my @A = split(/\t/, $line);
+	if(! $hash->{$A[$i]}){
+		$nr .= $line."\n";
+	}
+}
+my $cnt = 0;
+foreach my $line (@NL){
+	$nr .= $line."\n";
+	$cnt++;
+}
+
+open(my $rfh, ">", $rfile);
+print $rfh $nr;
+close $rfh;
+print "! output [$rfile] | redo = [$cnt]\n";
+
+}
+
+
+#---------------------------------------------------------------------
+sub Read_prev_afile{
+my $file = shift;
+my $i = shift;
+
+print "! reading [$file]...\n";
+open(my $fh, "<", $file);
+my $hash = {};
+my $cnt = 0;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	$line =~ s/\"//g;
+	
+	unless($line){
+		next;
+	}
+	if($cnt == 0){
+		$hash->{header} = $line;
+		$cnt++;
+		next;
+	}
+	
+	my @A = split(/\t/, $line);
+	$hash->{data} .= $line."\n";
+	$hash->{ID}{$A[$i]} = 1;
+	$cnt++;
+}
+close $fh;
+
+print "! [$cnt] lines\n";
+
+return $hash;
 }
 
 
@@ -673,6 +782,7 @@ foreach my $file (@{$ALNF}){
 	my @F1 = split(/_DB-/, $F0[1]);
 	my $qname0 = $F1[0];
 	my $dbname0 = $F1[1];
+	$dbname0 =~ s/_updated\.psl//;
 	$dbname0 =~ s/\.psl//;
 	
 	if($ho->{altname}{$qname0}){
@@ -731,6 +841,7 @@ for(my $p = $p0; $p < $p1; $p++){
 				my @F1 = split(/_DB-/, $F0[1]);
 				my $qname0 = $F1[0];
 				my $dbname0 = $F1[1];
+				$dbname0 =~ s/_updated\.psl//;
 				$dbname0 =~ s/\.psl//;
 				
 				if($dbname0 eq $hsample->{$i} && $qname0 eq $hsample->{$j}){
@@ -1538,7 +1649,9 @@ EOS
 	}
 }
 
-print "! partition [$t] : [$cnt_hit] candidates, [$cnt_selected] hits\n";
+if($cnt_hit > 0){
+	print "! partition [$t] : [$cnt_hit] candidates, [$cnt_selected] hits\n";
+}
 
 my $rh = {};
 $rh->{hit} = $hit;
@@ -1551,7 +1664,7 @@ return $rh;
 
 
 #-------------------------------------------------------------------------------
-sub Read_list{
+sub Read_list1{
 my $file = shift;
 
 print "! reading ID list [$file]...\n";
@@ -1592,6 +1705,59 @@ while(my $line = <$fh>){
 close $fh;
 
 print " [$cnt] entries\n";
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Read_list2{
+my $file = shift;
+my $hpreva = shift;
+
+print "! reading ID list [$file]...\n";
+open(my $fh, "<", $file) or die;
+my $hash = {};
+my $cnt = 0;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+#		print "! missing line\n";
+		next;
+	}
+	elsif($line =~ /\#/){
+		next;
+	}
+	elsif($line =~ /gid/ && $line =~ /chr/i){
+		next;
+	}
+	
+	my @A;
+	if($line =~ /,/){
+		@A = split(/,/, $line);
+	}
+	elsif($line =~ /\t/){
+		@A = split(/\t/, $line);
+	}
+	else{
+		$A[0] = $line;
+	}
+	
+	if($A[0]){
+		if($hpreva->{$A[0]}){
+			next;
+		}
+		else{
+			$hash->{$A[0]} = 1;
+			$cnt++;
+		}
+	}
+}
+close $fh;
+
+print " [$cnt] entries (redo target)\n";
 
 return $hash;
 }
@@ -2482,9 +2648,9 @@ if($script && -e $script){
 
 #-------------------------------------------------------------------------------
 sub Batch_prepseq{
-my ($bin_prepseq4annot, $combined_preplog, $random_IDlist, $genelist, $qfasta, $dbgff, $dbfasta, $dbprotein, $dbtranscript, $dbcds, $afile, $rfile_final, $n0, $n1, $tmpdir, $log_gth, $script, $combined_qprot, $tmp_ralign, $bin_findorf, $i) = @_;
+my ($bin_prepseq4annot, $combined_preplog, $random_IDlist, $genelist, $qfasta, $dbgff, $dbfasta, $dbprotein, $dbtranscript, $dbcds, $afile, $rfile_final, $n0, $n1, $tmpdir, $log_orfsearch, $script, $combined_qprot, $tmp_ralign, $bin_findorf, $i, $combined_qgff) = @_;
 
-my $cmd = "$bin_prepseq4annot $random_IDlist $genelist $qfasta $dbgff $dbfasta $dbprotein $dbtranscript $dbcds $afile $rfile_final $n0 $n1 $tmpdir $log_gth $script $combined_qprot $tmp_ralign $bin_findorf $i >> $combined_preplog 2>&1";
+my $cmd = "$bin_prepseq4annot $random_IDlist $genelist $qfasta $dbgff $dbfasta $dbprotein $dbtranscript $dbcds $afile $rfile_final $n0 $n1 $tmpdir $log_orfsearch $script $combined_qprot $tmp_ralign $bin_findorf $i $combined_qgff >> $combined_preplog 2>&1";
 
 my $cnt = $n1 - $n0;
 print " thread [$i] : [$cnt] queries...\n";
