@@ -43,12 +43,14 @@ We have validated the Asm2sv pipeline with the following environment:
   - LAST<sup>[*4]</sup>
   - matcher<sup>[*4]</sup>
   - genome threader<sup>[*5]</sup>
+  - miniprot<sup>[*6]</sup>
 
 <sup>[*1] It may be necessary to install some modules with `cpan install` command.</sup>  
 <sup>[*2] They must be in your PATH.</sup>  
 <sup>[*3] These can be installed with `miniconda3` in which `bioconda` and `conda-forge` channels are added.</sup>  
 <sup>[*4] These can be installed with `apt-get install` command.</sup>  
 <sup>[*5] Included in the bin directory.</sup> 
+<sup>[*6] Download from github then compile to obtain program.</sup> 
 ####
 
 <h2 id="Installation"># Installation</h2>
