@@ -9,8 +9,8 @@ use Getopt::Long;
 use Sys::Hostname;
 
 my $version = "#------------------------------------------------------------\n";
-$version .= "Asm2sv version 1.42\n";
-$version .= "last update: [2023\/1\/28]\n";
+$version .= "Asm2sv version 1.45\n";
+$version .= "last update: [2023\/3\/30]\n";
 $version .= "copyright: ryoichi yano\n";
 $version .= "#------------------------------------------------------------\n";
 
@@ -31,6 +31,8 @@ my $bin_Psl_tigPlot3 = $script_path."/scripts/Psl_tigPlot3.pl";
 my $bin_prepseq4annot = $script_path."/scripts/prepseq4annot.pl";
 my $bin_unitesummary = $script_path."/scripts/unitesummary.pl";
 my $bin_gfftolist = $script_path."/scripts/gfftolist.pl";
+my $bin_gffdiffpos = $script_path."/scripts/Gff3_diffIDpos_2files.pl";
+my $bin_updateref = $script_path."/scripts/updateref.pl";
 
 my $file_permission = Check_script_permission($script_path, $wpath);
 if($file_permission > 0){
@@ -41,10 +43,10 @@ if(! -e $bin_psl2sv){
 	print "\n! missing [$bin_psl2sv]...\n";
 	goto END;
 }
-if($host eq 'cluster1' && ! -e $bin_psl2sv_clsr){
-	print "\n! missing [$bin_psl2sv_clsr]...\n";
-	goto END;
-}
+#if($host eq 'cluster1' && ! -e $bin_psl2sv_clsr){
+#	print "\n! missing [$bin_psl2sv_clsr]...\n";
+#	goto END;
+#}
 if(! -e $bin_asm2sv){
 	print "\n! missing [$bin_asm2sv]...\n";
 	goto END;
@@ -83,7 +85,7 @@ if(! $ARGV[0]){
 	$status = "missing";
 	goto END;
 }
-elsif($ARGV[0] ne 'run' && $ARGV[0] ne 'check' && $ARGV[0] ne 'makecmd' && $ARGV[0] ne 'unite' && $ARGV[0] ne 'plot' && $ARGV[0] ne 'gfftolist'){
+elsif($ARGV[0] ne 'run' && $ARGV[0] ne 'check' && $ARGV[0] ne 'makecmd' && $ARGV[0] ne 'unite' && $ARGV[0] ne 'plot' && $ARGV[0] ne 'gfftolist' && $ARGV[0] ne 'updateref'){
 	Help(1, "null");
 	$status = "missing";
 	goto END;
@@ -96,19 +98,21 @@ elsif($ARGV[0] eq 'run'){
 	my $genelist;
 	my $qfasta;
 	my $qpsl;
-	my $chrinfo;
+#	my $chrinfo;
 	my $outplot;
 	my $prev_tsv;
 	my $neighbor_tlen;
 	my $cluster;
 	my $cpu;
-	my $cpu_gth;
+	my $cpu_orf;
 	my $stop_after_psl;
+	my $redo_examine;
+	my $redo_orfsearch;
 	my $help;
 	my $test;
 	my $skip_orfsearch;
 
-	GetOptions('--db=s' => \$dbfasta, '--gff=s' => \$dbgff, '--list=s' => \$genelist, '--query=s' => \$qfasta, '--alignpsl=s' => \$qpsl, '--chralias=s' => \$chrinfo, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--thread=i' => \$cpu, '--xthread=i' => \$cpu_gth, '--plot=s' => \$outplot, '--prev=s' => \$prev_tsv, '--1' => \$cluster, '--9' => \$stop_after_psl, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
+	GetOptions('--rfasta=s' => \$dbfasta, '--gff=s' => \$dbgff, '--list=s' => \$genelist, '--query=s' => \$qfasta, '--alignpsl=s' => \$qpsl, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--thread=i' => \$cpu, '--xthread=i' => \$cpu_orf, '--plot=s' => \$outplot, '--prev=s' => \$prev_tsv, '--1' => \$cluster, '--5' => \$redo_examine, '--7' => \$redo_orfsearch, '--9' => \$stop_after_psl, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
 
 	if($cluster){
 		$host = "cluster1";
@@ -147,9 +151,12 @@ elsif($ARGV[0] eq 'run'){
 			$stop_after_psl = 0;
 		}
 	}
-	if(! $chrinfo || ! -e $chrinfo){
-		$chrinfo = "null";
+	if($redo_orfsearch || $redo_examine){
+		$skip_orfsearch = 0;
 	}
+#	if(! $chrinfo || ! -e $chrinfo){
+#		$chrinfo = "null";
+#	}
 	if($status eq 'missing'){
 		Help(2, $ARGV[0]);
 		goto END;
@@ -187,14 +194,14 @@ elsif($ARGV[0] eq 'run'){
 	elsif($cpu > 128){
 		$cpu = 128;
 	}
-	unless($cpu_gth){
-		$cpu_gth = $cpu;
+	unless($cpu_orf){
+		$cpu_orf = $cpu;
 	}
-	elsif($cpu_gth > $cpu){
-		$cpu_gth = $cpu;
+	elsif($cpu_orf > $cpu){
+		$cpu_orf = $cpu;
 	}
-	elsif($cpu_gth < 0){
-		$cpu_gth = 1;
+	elsif($cpu_orf < 0){
+		$cpu_orf = 1;
 	}
 	unless($test){
 		$test = 0;
@@ -207,7 +214,7 @@ elsif($ARGV[0] eq 'run'){
 	$log .= "! query fasta         : [$qfasta]\n";
 	$log .= "! query psl           : [$qpsl]\n";
 	$log .= "! neighbor seq target : [$neighbor_tlen] bp (e.g. promoter region)\n";
-	$log .= "! chr alias info      : [$chrinfo]\n";
+#	$log .= "! chr alias info      : [$chrinfo]\n";
 	$log .= "! previous result     : [$prev_tsv]\n";
 
 	print $log,"\n";
@@ -224,6 +231,7 @@ elsif($ARGV[0] eq 'run'){
 	push(@APP, "makeblastdb");
 	push(@APP, "blastn");
 	push(@APP, "maf-convert");
+	push(@APP, "miniprot");
 
 	my $hbin = {};
 	foreach my $app (@APP){
@@ -267,7 +275,7 @@ elsif($ARGV[0] eq 'run'){
 	$genelist = CpFile($genelist);
 	$qfasta = CpFile($qfasta);
 	$qpsl = CpFile($qpsl);
-	$chrinfo = CpFile($chrinfo);
+#	$chrinfo = CpFile($chrinfo);
 	$prev_tsv = CpFile($prev_tsv);
 	
 	my $judge_orft0 = "false";
@@ -290,23 +298,12 @@ elsif($ARGV[0] eq 'run'){
 				print "! [$rfile] already exists, skip round [$i]...\n";
 				next;
 			}
-#			else{
-#				my $judge_prevorf = CheckORFsearch_prevresult($rfile);
-#				if($i == 0 && $judge_prevorf eq 'true'){
-#					$judge_orft0 = "true";
-#				}
-#				if($judge_prevorf eq 'true'){
-#					print "! [$rfile] already exists with ORF information, skip round [$i]...\n";
-#					next;
-#				}
-#				elsif($i > 0 && $judge_orft0 eq 'true'){
-#					print "! [$rfile] already exists with ORF information (0), skip round [$i]...\n";
-#					next;
-#				}
-#				else{
-#					print "! [$rfile] already exists, but ORF search had not been performed yet...\n";
-#				}
-#			}
+			elsif($redo_orfsearch){
+				print "! --7 is invoked...\n";
+				my $backup = $rfile.".backup";
+				system("cp $rfile $backup");
+				ResetORFresult($rfile);
+			}
 		}
 		
 		my $tmplist = $genelist;
@@ -325,25 +322,28 @@ elsif($ARGV[0] eq 'run'){
 			if(-e $tmplist){
 				my $cmd;
 				if($qpsl && -e $qpsl){
-					if($host eq 'cluster1'){
-						$bin_psl2sv = $bin_psl2sv_clsr;
-					}
+#					if($host eq 'cluster1'){
+#						$bin_psl2sv = $bin_psl2sv_clsr;
+#					}
 					$cmd = "$bin_psl2sv -d $dbfasta -g $dbgff -l $tmplist -q $qfasta -a $qpsl -t $cpu --span $initspan -o $subdir";
 					
 					if($neighbor_tlen){
 						$cmd .= " --neighbor $neighbor_tlen";
 					}
-					if($chrinfo && -e $chrinfo){
-						$cmd .= " -c $chrinfo";
-					}
+#					if($chrinfo && -e $chrinfo){
+#						$cmd .= " -c $chrinfo";
+#					}
 					if($outplot){
 						$cmd .= " --plot";
 					}
 					if($skip_orfsearch){
 						$cmd .= " --wo_orfsearch";
 					}
-					if($cpu_gth != $cpu){
-						$cmd .= " --xthread $cpu_gth";
+					if($cpu_orf != $cpu){
+						$cmd .= " --xthread $cpu_orf";
+					}
+					if($redo_examine){
+						$cmd .= " --5";
 					}
 				}
 				else{
@@ -392,11 +392,14 @@ elsif($ARGV[0] eq 'run'){
 				if($skip_orfsearch){
 					$cmd .= " --wo_orfsearch";
 				}
-				if($cpu_gth != $cpu){
-					$cmd .= " --xthread $cpu_gth";
+				if($cpu_orf != $cpu){
+					$cmd .= " --xthread $cpu_orf";
 				}
 				if($host eq 'cluster1'){
 					$cmd .= " --1";
+				}
+				if($redo_examine){
+					$cmd .= " --5";
 				}
 				print "! cmd=[$cmd]\n";
 				system($cmd);
@@ -419,9 +422,18 @@ elsif($ARGV[0] eq 'run'){
 		my $prevdir = "round_$j";
 		my $rfile_prev = "./round_$j/summary_genome2sv_".$prevdir."_".$qpref.".tsv";
 		my $rfile_orf = "./round_$j/predicted_".$qpref.".fasta";
+		my $rfile_gff = "./round_$j/predicted_".$qpref.".gff";
 		if(-e $rfile_prev){
-			print " [$j] | $hinitspan->{$j} >= $neighbor_tlen : $rfile_prev\n";
-			$hcollect = CollectResult($rfile_prev, $hcollect, $hinitspan->{$j}, $j, $rfile_orf, $qpref);
+			print " [$j] | $hinitspan->{$j} >= $neighbor_tlen : [$rfile_prev]\n";
+			$hcollect = CollectResult($rfile_prev, $hcollect, $hinitspan->{$j}, $j, $rfile_orf, $rfile_gff, $qpref);
+			
+			if(! $hcollect->{with_gff}){
+				$hcollect->{with_gff} = 0;
+			}
+			if(! $hcollect->{missing_gff}){
+				$hcollect->{missing_gff} = 0;
+			}
+			print "! [$hcollect->{with_gff}] / [$hcollect->{missing_gff}] = with / without Gff record\n";
 		}
 	}
 
@@ -434,8 +446,17 @@ elsif($ARGV[0] eq 'run'){
 	}
 	my $rfile_final = "rev_summary_genome2sv_".$qpref.".tsv";
 	my $rorf_final = "selected_predict_orf_".$qpref.".fasta";
+	my $rgff_final = "selected_predict_orf_".$qpref.".gff";
 	my $log_final = "final_log_stats_".$qpref.".tsv";
-	Summarize_result($hcollect, $genelist, $dbpref, $qpref, $g2tdb, $rfile_final, $log_final, $neighbor_tlen, $skip_orfsearch, $rorf_final);
+	
+	if($hcollect->{err}){
+		Rm($rfile_final);
+		Rm($rorf_final);
+		Rm($rgff_final);
+	}
+	else{
+		Summarize_result($hcollect, $genelist, $dbpref, $qpref, $g2tdb, $rfile_final, $log_final, $neighbor_tlen, $skip_orfsearch, $rorf_final, $rgff_final);
+	}
 }
 elsif($ARGV[0] eq 'check'){
 	#---------------------------------------------------------//
@@ -451,6 +472,7 @@ elsif($ARGV[0] eq 'check'){
 	push(@APP, "makeblastdb");
 	push(@APP, "blastn");
 	push(@APP, "maf-convert");
+	push(@APP, "miniprot");
 	
 	print "\n";
 	my $hbin = {};
@@ -474,13 +496,14 @@ elsif($ARGV[0] eq 'makecmd'){
 	my $outplot;
 	my $neighbor_tlen;
 	my $cpu;
-	my $cpu_gth;
+	my $cpu_orf;
 	my $skip_orfsearch;
 	my $cluster;
 	my $stop_after_psl;
+	my $redo_orfsearch;
 	my $help;
 
-	GetOptions('--input=s' => \$datalist, '--neighbor=i' => \$neighbor_tlen, '--thread=i' => \$cpu, '--xthread=i' => \$cpu_gth, '--plot=s' => \$outplot, '--cluster' => \$cluster, '--9' => \$stop_after_psl, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
+	GetOptions('--input=s' => \$datalist, '--neighbor=i' => \$neighbor_tlen, '--thread=i' => \$cpu, '--xthread=i' => \$cpu_orf, '--plot=s' => \$outplot, '--cluster' => \$cluster, '--7' => \$redo_orfsearch, '--9' => \$stop_after_psl, '--wo_orfsearch' => \$skip_orfsearch, '--help' => \$help);
 
 	print "\n";
 	if(! $datalist || ! -e $datalist){
@@ -490,6 +513,10 @@ elsif($ARGV[0] eq 'makecmd'){
 	if($status eq 'missing'){
 		Help(3, $ARGV[0]);
 		goto END;
+	}
+	if($redo_orfsearch && $skip_orfsearch){
+		$redo_orfsearch = 1;
+		$skip_orfsearch = 0;
 	}
 	
 	unless($neighbor_tlen){
@@ -517,20 +544,25 @@ elsif($ARGV[0] eq 'makecmd'){
 	elsif($cpu > 128){
 		$cpu = 128;
 	}
-	unless($cpu_gth){
-		$cpu_gth = $cpu;
+	unless($cpu_orf){
+		$cpu_orf = $cpu;
 	}
-	elsif($cpu_gth > $cpu){
-		$cpu_gth = $cpu;
+	elsif($cpu_orf > $cpu){
+		$cpu_orf = $cpu;
 	}
-	elsif($cpu_gth < 0){
-		$cpu_gth = 1;
+	elsif($cpu_orf < 0){
+		$cpu_orf = 1;
 	}
 	
-	my $AoData = Read_datalist($datalist, $ARGV[0]);
+	my ($AoData, $err_list) = Read_datalist($datalist, $ARGV[0]);
+	if($err_list){
+		print "! list format error...\n";
+		goto END;
+	}
+	
 	my $cmds = "";
 	foreach my $hfile (@{$AoData}){
-		$cmds .= "$script_path/Asm2sv run -d $hfile->{dbfasta} -g $hfile->{dbgff} -l $hfile->{genelist} -q $hfile->{qfasta} -t $cpu --neighbor $neighbor_tlen";
+		$cmds .= "$script_path/Asm2sv run -r $hfile->{dbfasta} -g $hfile->{dbgff} -l $hfile->{genelist} -q $hfile->{qfasta} -t $cpu --neighbor $neighbor_tlen";
 		
 		if($hfile->{qpsl} && $hfile->{qpsl} ne 'null' && -e $hfile->{qpsl}){
 			$cmds .= " -a $hfile->{qpsl}";
@@ -551,8 +583,11 @@ elsif($ARGV[0] eq 'makecmd'){
 		if($skip_orfsearch){
 			$cmds .= " --wo_orfsearch";
 		}
-		if($cpu_gth != $cpu){
-			$cmds .= " -x $cpu_gth";
+		if($cpu_orf != $cpu){
+			$cmds .= " -x $cpu_orf";
+		}
+		if($redo_orfsearch){
+			$cmds .= " --7";
 		}
 		if($cluster){
 			$cmds .= " --1";
@@ -566,6 +601,281 @@ elsif($ARGV[0] eq 'makecmd'){
 	$cmdfile =~ s/\.csv/\.sh/;
 	SAVE($cmdfile, $cmds);
 	print "! output commands [$cmdfile]\n";
+}
+elsif($ARGV[0] eq 'updateref'){
+	#---------------------------------------------------------//
+	my $datalist;
+	my $new_fasta;
+	my $new_gff;
+	my $chrID_alias;
+	my $dir_backup;
+	my $cpu;
+	my $cpu_orf;
+	my $skip_orfsearch;
+	my $skip_1stcheck;
+	my $neighbor_tlen = 5000;
+	my $cluster;
+	my $help;
+
+	GetOptions('--input=s' => \$datalist, '--alias_seqID=s' => \$chrID_alias, '--rfasta=s' => \$new_fasta, '--gff=s' => \$new_gff, '--thread=i' => \$cpu, '--xthread=i' => \$cpu_orf, '--backup_dir=s' => \$dir_backup, '--cluster' => \$cluster, '--wo_orfsearch' => \$skip_orfsearch, '--skip' => \$skip_1stcheck, '--help' => \$help);
+
+	print "\n";
+	if(! $datalist || ! -e $datalist){
+		print "! missing datalist csv\n";
+		$status = "missing";
+	}
+	if(! $new_fasta || ! -e $new_fasta){
+		print "! missing new reference fasta\n";
+		$status = "missing";
+	}
+	if(! $new_gff || ! -e $new_gff){
+		print "! missing new reference Gff\n";
+		$status = "missing";
+	}
+	if(! $chrID_alias || ! -e $chrID_alias){
+		print "! missing alias_seqID\n";
+		$status = "missing";
+	}
+	if($status eq 'missing'){
+		Help(7, $ARGV[0]);
+		goto END;
+	}
+	
+	unless($dir_backup){
+#		$dir_backup = "null";
+		$dir_backup = "_backup_previous";
+	}
+	
+	unless($cpu){
+		$cpu = 16;
+	}
+	elsif($cpu =~ /\D/){
+		$cpu = 16;
+	}
+	elsif($cpu < 0){
+		$cpu = 16;
+	}
+	elsif($cpu > 128){
+		$cpu = 128;
+	}
+	unless($cpu_orf){
+		$cpu_orf = $cpu;
+	}
+	elsif($cpu_orf > $cpu){
+		$cpu_orf = $cpu;
+	}
+	elsif($cpu_orf < 0){
+		$cpu_orf = 1;
+	}
+	
+	my ($AoData, $err_list, $prev_reffasta, $prev_refgff) = Read_datalist($datalist, $ARGV[0]);
+	if($err_list){
+		print "! list format error...\n";
+		goto END;
+	}
+	
+	my $hrn = Read_aliaslist($chrID_alias);
+	if($hrn->{err}){
+		goto END;
+	}
+	
+	if($dir_backup ne 'null'){
+		print "\n! creating backup...\n";
+		unless(-d $dir_backup){
+			system("mkdir $dir_backup");
+		}
+		
+		foreach my $hfile (@{$AoData}){
+			if($hfile->{outdir} && $hfile->{outdir} ne 'null'){
+				system("cp -n -R $hfile->{outdir} ./$dir_backup/");
+			}
+		}
+		print "! done.\n";
+	}
+	
+	unless($skip_1stcheck){
+		print "\n! checking seq ID alias...\n";
+		my $hcheck0f = Check_IDalias_fasta($prev_reffasta, $hrn->{f}, "previous");
+		my $hcheck1f = Check_IDalias_fasta($new_fasta, $hrn->{r}, "new");
+		
+		if(! $hcheck0f->{err} && ! $hcheck1f->{err}){
+			print "! all ID OK\n";
+		}
+		else{
+			print "! error : inconsistent seq ID alias, please check [$chrID_alias]...\n";
+			goto END;
+		}
+		print "! done.\n";
+	}
+	
+	print "\n! comparing gene ID and positions...\n";
+	print " - [$prev_refgff] = previous\n";
+	print " - [$new_gff] = new\n";
+	
+	my $dir_aliasinfo = "_seqIDalias_info";
+	if($dir_backup ne 'null'){
+		$dir_aliasinfo = $dir_backup;
+	}
+	my $prefix0 = Prefix_Gff($prev_refgff);
+	my $prefix1 = Prefix_Gff($new_gff);
+	my $aliasinfo0 = "./$dir_aliasinfo/diffIDpos_".$prefix0."_absentFrom-".$prefix1.".gff3";
+	my $aliasinfo1 = "./$dir_aliasinfo/diffIDpos_".$prefix1."_absentFrom-".$prefix0.".gff3";
+	my $aliasinfoi = "./$dir_aliasinfo/diffIDpos_summary_".$prefix1."_vs_".$prefix0.".csv";
+	
+	if(! -e $aliasinfoi){
+		my $cmd0 = "$bin_gffdiffpos $prev_refgff $new_gff $chrID_alias $aliasinfo0 $aliasinfo1 $aliasinfoi";
+		if(system($cmd0) != 0){
+			print "! failed.\n";
+			goto END;
+		}
+	}
+	else{
+		print "! [$aliasinfoi] already exists\n";
+	}
+	
+	print "\n! checking header of previous results...\n";
+	my $hsvheader = {};
+	foreach my $hfile (@{$AoData}){
+		$hsvheader = ChecksvHeader($hfile->{svresult}, $hsvheader);
+	}
+	
+	my $hnrtlen = $hsvheader->{neighbor_tlen};
+	my @NRtlen = keys(%{$hnrtlen});
+	my $num_NRtlen = @NRtlen;
+	if($num_NRtlen != 1){
+		print "! abort script due to multiple neighbor_tlen (results may be mixture of different parameter settings)...\n";
+		goto END;
+	}
+	else{
+		$neighbor_tlen = $NRtlen[0];
+	}
+	print "! --neighbor = [$neighbor_tlen] bp\n";
+	
+	my $rev_gene_list = $new_gff;
+	my @Chars = split(//, $new_gff);
+	if($rev_gene_list =~ /\//){
+		my @tmp = split(/\//, $rev_gene_list);
+		my $ntmp = @tmp;
+		my @tmpD;
+		for(my $i = 0; $i < $ntmp - 1; $i++){
+			push(@tmpD, $tmp[$i]);
+		}
+		$tmp[$ntmp - 1] =~ s/\.gff3//;
+		$tmp[$ntmp - 1] =~ s/\.gff//;
+		
+		if($Chars[0] eq '.'){
+			$rev_gene_list = join("\/", @tmpD)."/summary_gene_".$tmp[$ntmp - 1].".csv";
+		}
+		elsif($Chars[0] eq '/'){
+			$rev_gene_list = "/".join("\/", @tmpD)."/summary_gene_".$tmp[$ntmp - 1].".csv";
+		}
+		else{
+			$new_gff = "./".$new_gff;
+			$rev_gene_list = "./".join("\/", @tmpD)."/summary_gene_".$tmp[$ntmp - 1].".csv";
+		}
+	}
+	else{
+		$rev_gene_list =~ s/\.gff3//;
+		$rev_gene_list =~ s/\.gff//;
+		$rev_gene_list = "summary_gene_".$rev_gene_list.".csv";
+	}
+	
+	if(! -e $rev_gene_list){
+		print "\n! preparing gene list of new Gff...\n";
+		my $cmd2 = "$bin_gfftolist $new_gff $rev_gene_list";
+		if(system($cmd2) != 0){
+			print "! failed.\n";
+			goto END;
+		}
+	}
+	
+	print "\n! update asm2sv datasets based on new reference...\n";
+	my $updated_sample_list = "dbfasta,dbgff,genelist,qfasta,qpsl,outdir\n";
+	my $cmds = "";
+	my $num_target = 0;
+	my $prefix0f = Prefix_fasta($prev_reffasta);
+	my $prefix1f = Prefix_fasta($new_fasta);
+	my $notice_log = "";
+	
+	foreach my $hfile (@{$AoData}){
+		print "#----------------------------------------------------------------\n";
+		print "! [$num_target] | [$hfile->{outdir}]\n";
+		my $cmd1 = "$bin_updateref $chrID_alias $aliasinfoi $hfile->{outdir} $hfile->{dbfasta} $hfile->{dbgff} $new_fasta $new_gff";
+#		print "$cmd1\n";
+		if(system($cmd1) != 0){
+			print "! failed.\n";
+			goto END;
+		}
+		
+		if(! $hfile->{qpsl} || $hfile->{qpsl} eq 'null' || ! -e $hfile->{qpsl}){
+			$hfile->{qpsl} = "null";
+		}
+		else{
+			my $rh = Revise_Psl($hfile->{qpsl}, $hrn->{f}, $prefix0f, $prefix1f, $hfile->{qpref});
+			if($rh->{err}){
+				print "! failed\n";
+				goto END;
+			}
+			
+			SAVE($rh->{updated_psl}, $rh->{lines});
+			$hfile->{qpsl} = $rh->{updated_psl};
+			
+			if($prefix0f eq $hfile->{qpref} && $hfile->{outdir} =~ /$hfile->{qpref}/){
+				my $new_dir = $hfile->{outdir};
+				$new_dir =~ s/$prefix0f/$prefix1f/g;
+				
+				print "! self-alignment : --outdir [$hfile->{outdir}] may be useless.\n";
+				print "! self-alignment : --outdir will be changed to [$new_dir]\n";
+				$notice_log .= "! [$hfile->{qpref}] --outdir [$hfile->{outdir}] is self-alignment and no longer used. Instead, \n";
+				$notice_log .= "! [$prefix1f] --outdir [$new_dir] is in command.\n";
+				
+				$hfile->{qfasta} = $new_fasta;
+				$hfile->{outdir} = $new_dir;
+			}
+		}
+		$updated_sample_list .= "$new_fasta,$new_gff,$rev_gene_list,$hfile->{qfasta},$hfile->{qpsl},$hfile->{outdir}\n";
+		$num_target++;
+	}
+	
+	my $rev_list = $datalist;
+	$rev_list =~ s/\.csv/_updated.csv/;
+	SAVE($rev_list, $updated_sample_list);
+	print "! updated sample list [$rev_list]\n";
+	
+	print "\n! preparing script for Asm2sv...\n";
+	foreach my $hfile (@{$AoData}){
+		if($prefix0f eq $hfile->{qpref}){
+			$hfile->{qfasta} = $new_fasta;
+		}
+		
+		$cmds .= "$script_path/Asm2sv run -r $new_fasta -g $new_gff -l $rev_gene_list -q $hfile->{qfasta} --neighbor $neighbor_tlen -t $cpu";
+		
+		if($cpu_orf != $cpu){
+			$cmds .= " -x $cpu_orf";
+		}
+		if($hfile->{qpsl} && $hfile->{qpsl} ne 'null' && -e $hfile->{qpsl}){
+			$cmds .= " -a $hfile->{qpsl}";
+		}
+		if($hfile->{outdir} && $hfile->{outdir} ne 'null'){
+			$cmds .= " -o $hfile->{outdir}";
+		}
+		if($prefix0f ne $hfile->{qpref}){
+			$cmds .= " --5";
+		}
+		if($cluster){
+			$cmds .= " --1";
+		}
+		$cmds .= "\n";
+	}
+	
+	my $cmdfile = "cmd_update_asm2sv_".$datalist;
+	$cmdfile =~ s/\.csv/\.sh/;
+	SAVE($cmdfile, $cmds);
+	print "! output commands [$cmdfile]\n";
+	
+	if($notice_log){
+		print "\n[notice]\n$notice_log";
+	}
 }
 elsif($ARGV[0] eq 'unite'){
 	#---------------------------------------------------------//
@@ -593,10 +903,17 @@ elsif($ARGV[0] eq 'unite'){
 		goto END;
 	}
 	
-	my $AoData = Read_datalist($datalist, $ARGV[0]);
+	my ($AoData, $err_list) = Read_datalist($datalist, $ARGV[0]);
+	if($err_list){
+		print "! list format error...\n";
+		goto END;
+	}
+	
 	my @SVs;
 	my @Qorf;
 	my $refgenome = "null";
+	my $reffasta = "null";
+	my $refgff = "null";
 	foreach my $hfile (@{$AoData}){
 		if(-e $hfile->{svresult}){
 			push(@SVs, $hfile->{svresult});
@@ -604,11 +921,15 @@ elsif($ARGV[0] eq 'unite'){
 			
 			if($hfile->{refgenome}){
 				$refgenome = $hfile->{refgenome};
+				$reffasta = $hfile->{reffasta};
+			}
+			if($hfile->{refgff}){
+				$refgff = $hfile->{refgff};
 			}
 		}
 	}
 	if(@SVs){
-		my $cmd = "$bin_unitesummary ".join(",", @SVs)." $refgenome $chrinfo ".join(",", @Qorf);
+		my $cmd = "$bin_unitesummary ".join(",", @SVs)." $reffasta $refgff $datalist $chrinfo ".join(",", @Qorf);
 #		print "\n! cmd=[$cmd]\n";
 		print "\nPress ENTER to proceed: ";
 		my $enter = <STDIN>;
@@ -635,7 +956,7 @@ elsif($ARGV[0] eq 'plot'){
 	my $help;
 	my $test;
 
-	GetOptions('--db=s' => \$dbfasta, '--gff=s' => \$dbgff, '--qlist=s' => \$falist, '--idlist=s' => \$qgene_list, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--flen=s' => \$flanking_alen, '--cpu=i' => \$cpu, '--test' => \$test, '--help' => \$help);
+	GetOptions('--rfasta=s' => \$dbfasta, '--gff=s' => \$dbgff, '--qlist=s' => \$falist, '--idlist=s' => \$qgene_list, '--output_dir=s' => \$dir, '--neighbor=i' => \$neighbor_tlen, '--flen=s' => \$flanking_alen, '--cpu=i' => \$cpu, '--test' => \$test, '--help' => \$help);
 
 	print "\n";
 	if(! $dbfasta || ! -e $dbfasta){
@@ -731,7 +1052,8 @@ elsif($ARGV[0] eq 'plot'){
 	push(@APP, "lastal");
 	push(@APP, "makeblastdb");
 	push(@APP, "blastn");
-
+	push(@APP, "miniprot");
+	
 	my $hbin = {};
 	foreach my $app (@APP){
 		$hbin->{$app}[0] = $app;
@@ -832,7 +1154,7 @@ elsif($ARGV[0] eq 'plot'){
 					
 					my $shfile = "./cmdlog/cmd_$qgene.sh";
 					my $logfile = "./cmdlog/log_$qgene.txt";
-					my $cmd = "$bin_asm2sv -d $dbfasta -g $dbgff -l $tmplist -q $qfasta --cpu $each_cpu --span $initspan --plot -o $subdir";
+					my $cmd = "$bin_asm2sv -r $dbfasta -g $dbgff -l $tmplist -q $qfasta --cpu $each_cpu --span $initspan --plot -o $subdir";
 #					if($qpsl ne 'null' && -e $qpsl){
 #						$cmd .= " -a $qpsl";
 #					}
@@ -921,16 +1243,16 @@ if(! $mode || $mode eq '1'){
 	$help_command =<<"EOS";
 
 Basic usage: 
-  /path/to/Asm2sv run or check or makecmd or gfftolist or unite or plot
+  /path/to/Asm2sv run or check or makecmd or gfftolist or unite or plot or updateref
 EOS
 }
 elsif($mode eq '2'){
 	$help_command =<<"EOS";
 
 Basic usage: 
-  /path/to/Asm2sv $option -d [reference fasta] -g [reference gff3] -l [gene list] -q [query fasta] -a [alignment psl] -c [chr alias info] -o [directory] --thread [CPU thread] --neighbor [neighbor seq span]
+  /path/to/Asm2sv $option -r [reference fasta] -g [reference gff3] -l [gene list] -q [query fasta] -a [alignment psl] -c [chr alias info] -o [directory] --thread [CPU thread] --neighbor [neighbor seq span]
 
---db or -d            : reference sequence (fasta, required)
+--rfasta or -r        : reference sequence (fasta, required)
 --gff or -g           : reference gff (gff, required)
 --list or -l          : list of gene to be analyzed (csv or txt, required)
 --query or -q         : query fasta (fasta, required)
@@ -940,6 +1262,7 @@ Basic usage:
 --wo_orfsearch or -w  : without ORF prediction
 --plot                : outplot alignment dotplots focused on the region of each gene (a large number of png will be generated)
 --thread or -t        : CPU thread number (default 16)
+--xthread or -x       : CPU thread number for ORF search (default 16)
 --output_dir or -o    : output directory
 --help or -h          : display usage
 EOS
@@ -955,6 +1278,7 @@ Basic usage:
                        
 --neighbor or -n      : include [X] bp neighboring seq to analyze SV in addition to target (e.g. promoter)
 --thread or -t        : CPU thread number (default 16)
+--xthread or -x       : CPU thread number for ORF search (default 16)
 --cluster             : use cluster pc
 --help or -h          : display usage
 EOS
@@ -976,9 +1300,9 @@ elsif($mode eq '5'){
 	$help_command =<<"EOS";
 
 Basic usage: 
-  /path/to/Asm2sv $option -d [reference fasta] -g [reference gff3] -q [fasta list] -i [gene ID list] -o [directory] --cpu [CPU thread] --flen [flanking seq span] --neighbor [neighbor seq span]
+  /path/to/Asm2sv $option -r [reference fasta] -g [reference gff3] -q [fasta list] -i [gene ID list] -o [directory] --cpu [CPU thread] --flen [flanking seq span] --neighbor [neighbor seq span]
 
---db or -d            : reference sequence (fasta, required)
+--rfasta or -r        : reference sequence (fasta, required)
 --gff or -g           : reference gff (gff, required)
 --qlist or -q         : list of genomic fasta file (csv or txt, required)
 --id or -i            : query gene ID list (txt, required)
@@ -996,6 +1320,39 @@ Basic usage:
   /path/to/Asm2sv $option -g [reference gff3]
 
 --gff or -g           : reference gff (gff, required)
+--help or -h          : display usage
+EOS
+}
+elsif($mode eq '7'){
+	$help_command =<<"EOS";
+
+Basic usage: 
+  /path/to/Asm2sv $option -i [datalist csv] -a [seqID alias csv] -r [new fasta] -g [new Gff] -b [backup dir] --xthread [CPU thread]
+
+--input or -i         : data file list (PATH of fasta, GFF, psl, and other files)
+                       *header should be "dbfasta" "dbgff" "genelist" "qfasta" "qpsl" "chralias"
+                       
+--rfasta or -r        : new reference sequence (fasta, *)
+--gff or -g           : new Gff (*)
+--alias_seqID or -a   : alias for chromosome/scaffold ID in the new Gff (csv, column1 = previous, column2 = new)
+--backup_dir or -b    : backup directory
+--xthread or -x       : CPU thread number for ORF search (default 16)
+--cluster             : use cluster pc
+--help or -h          : display usage
+
+*seqID must be same with the previous fasta and Gff
+EOS
+}
+elsif($mode eq '4'){
+	$help_command =<<"EOS";
+
+Basic usage: 
+  /path/to/Asm2sv $option -i [datalist csv] -c [chr alias info]
+
+--input or -i         : data file list (PATH of fasta, GFF, psl, and other files)
+                       *header should be "dbfasta" "dbgff" "genelist" "qfasta" "qpsl" "chralias"
+                       
+--chralias or -c      : chromosome ID alias info (tsv, required)
 --help or -h          : display usage
 EOS
 }
@@ -1046,6 +1403,41 @@ return $judge;
 
 
 #-------------------------------------------------------------------------------
+sub ResetORFresult{
+my $file = shift;
+
+open(my $fh, "<", $file);
+my $nlines = "";
+my $cnt = 0;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	if($cnt == 0){
+		$nlines .= $line."\n";
+	}
+	else{
+		my @A = split(/\t/, $line);
+		my $numA = @A;
+		if($numA > 35){
+			for(my $i = 34; $i < 39; $i++){
+				$A[$i] = "-";
+			}
+		}
+		$nlines .= join("\t", @A)."\n";
+	}
+	$cnt++;
+}
+close $fh;
+
+open(my $rfh, ">", $file);
+print $rfh $nlines;
+close $rfh;
+
+}
+
+
+#-------------------------------------------------------------------------------
 sub Read_datalist{
 my $file = shift;
 my $option = shift;
@@ -1055,6 +1447,9 @@ open(my $fh, "<", $file);
 my $AoA = [];
 my @H;
 my $cnt = 0;
+my $err = 0;
+my $nrfasta = {};
+my $nrgff = {};
 while(my $line = <$fh>){
 	$line =~ s/\n//;
 	$line =~ s/\r//;
@@ -1108,6 +1503,9 @@ while(my $line = <$fh>){
 				$dbpref =~ s/\.fa//;
 				$hash->{dbpref} = $dbpref;
 				
+#				$nrfasta->{$tmp0[$ntmp0 - 1]} = 1;
+				$nrfasta->{$hash->{dbfasta}} = 1;
+				
 				my @tmp1 = split(/\//, $hash->{qfasta});
 				my $ntmp1 = @tmp1;
 				my $qpref = $tmp1[$ntmp1 - 1];
@@ -1115,7 +1513,14 @@ while(my $line = <$fh>){
 				$qpref =~ s/\.fa//;
 				$hash->{qpref} = $qpref;
 				
-				my $expected_psl_name = "lastal_q-".$qpref."_DB-".$dbpref.".psl";
+				my @tmp2 = split(/\//, $hash->{dbgff});
+				my $ntmp2 = @tmp2;
+				my $dbgff = $tmp2[$ntmp2 - 1];
+				
+#				$nrgff->{$tmp2[$ntmp2 - 1]} = 1;
+				$nrgff->{$hash->{dbgff}} = 1;
+				
+				my $expected_psl_name = "lastal_q-".$qpref."_DB-".$dbpref;
 				if(! $hash->{outdir}){
 					$hash->{outdir} = "result_asm2sv_".$dbpref."_vs_".$qpref;
 				}
@@ -1143,13 +1548,17 @@ while(my $line = <$fh>){
 						push(@{$AoA}, $hash);
 					}
 				}
-				elsif($option eq 'unite'){
+				elsif($option eq 'unite' || $option eq 'updateref'){
 					if(-e $expected_svresult){
 						if($dbpref eq $qpref){
-							print " [$cnt] : sv result=[$expected_svresult] <OK> *reference\n";
+							if($option eq 'unite'){
+								print " [$cnt] : sv result=[$expected_svresult] <OK> *reference\n";
+							}
 							$hash->{refgenome} = $dbpref;
+							$hash->{reffasta} = $hash->{dbfasta};
+							$hash->{refgff} = $hash->{dbgff};
 						}
-						else{
+						elsif($option eq 'unite'){
 							print " [$cnt] : sv result=[$expected_svresult] <OK>\n";
 						}
 						$hash->{svresult} = $expected_svresult;
@@ -1158,14 +1567,43 @@ while(my $line = <$fh>){
 					}
 				}
 			}
+			else{
+				$err = 1;
+			}
 		}
 	}
 }
 close $fh;
 
-print "! total [$cnt] samples\n";
+my @NRF = keys(%{$nrfasta});
+my @NRG = keys(%{$nrgff});
+my $num_NRF = @NRF;
+my $num_NRG = @NRG;
+my $unique_reffasta = "";
+my $unique_refgff = "";
 
-return $AoA;
+if($num_NRF == 1 || $num_NRG == 1){
+	print "! dbfasta and dbgff are unique : [$NRF[0]] [$NRG[0]] <OK>\n";
+	$unique_reffasta = $NRF[0];
+	$unique_refgff = $NRG[0];
+}
+else{
+	print "! duplicated dbfasta/dbgff entries...\n";
+	print "  - [@NRF]\n";
+	print "  - [@NRG]\n";
+	$err = 1;
+}
+if($err == 0){
+	print "! total [$cnt] samples\n";
+}
+
+if($option eq 'updateref'){
+	return ($AoA, $err, $unique_reffasta, $unique_refgff);
+}
+else{
+	return ($AoA, $err);
+}
+
 }
 
 
@@ -1204,6 +1642,7 @@ my $log_final = shift;
 my $neighbor_tlen = shift;
 my $skip_orfsearch = shift;
 my $rorf_final = shift;
+my $rgff_final = shift;
 
 my $hentry = {};
 my $log_stat = "";
@@ -1293,6 +1732,7 @@ if(-e $genelist){
 my @GID = keys(%{$hash});
 my $AoA = [];
 my $orf_fasta = "";
+my $orf_gff = "";
 foreach my $gid (@GID){
 	if(! $hentry->{$gid}){
 		next;
@@ -1334,6 +1774,9 @@ foreach my $gid (@GID){
 	
 	if($hash->{$gid}{orf}){
 		$orf_fasta .= $hash->{$gid}{orf};
+	}
+	if($hash->{$gid}{pgff}){
+		$orf_gff .= $hash->{$gid}{pgff};
 	}
 #	else{
 #		print "! missing orf for [$gid]...\n";
@@ -1401,6 +1844,12 @@ if($orf_fasta){
 	print $rfh $orf_fasta;
 	close $rfh;
 	print "! output [$rorf_final]\n";
+}
+if($orf_gff){
+	open(my $rfh, ">", $rgff_final);
+	print $rfh $orf_gff;
+	close $rfh;
+	print "! output [$rgff_final]\n";
 }
 if($log_stat){
 	open(my $rfh, ">", $log_final);
@@ -1511,6 +1960,7 @@ my $hash = shift;
 my $initspan = shift;
 my $j = shift;
 my $orf_fasta = shift;
+my $rfile_gff = shift;
 my $qpref = shift;
 
 my $horf = {};
@@ -1528,19 +1978,17 @@ if(-e $orf_fasta){
 		
 		if($line =~ /\>/){
 			if($seq){
-				$horf->{$ID}{num} += 1;
-				$horf->{$ID}{fasta} .= ">".$ID."__".$qpref."__p.".$horf->{$ID}{num}."\n".$seq."\n";
+				my $tmp_qpref = $qpref."_";
+				my $gid = $ID;
+				$gid =~ s/$tmp_qpref//;
+				my @tmp = split(/_/, $gid);
+				$gid = $tmp[0];
 				
-#				if($cnt == $seg){
-#					print " [$cnt]\n";
-#					$seg += $add;
-#				}
+				$horf->{$gid}{num} += 1;
+				$horf->{$gid}{fasta} .= ">".$ID."\n".$seq."\n";
 			}
 			
-			my $tmp_qpref = $qpref."_";
-			$line =~ s/$tmp_qpref//;
-			my @tmp = split(/_/, $line);
-			$ID = $tmp[0];
+			$ID = $line;
 			$ID =~ s/\>//;
 			$seq = "";
 			$cnt++;
@@ -1555,9 +2003,92 @@ if(-e $orf_fasta){
 	close $fh;
 	
 	if($seq){
-		$horf->{$ID}{num} += 1;
-		$horf->{$ID}{fasta} .= ">".$ID."__".$qpref."__p.".$horf->{$ID}{num}."\n".$seq."\n";
+		my $tmp_qpref = $qpref."_";
+		my $gid = $ID;
+		$gid =~ s/$tmp_qpref//;
+		my @tmp = split(/_/, $gid);
+		$gid = $tmp[0];
+		
+		$horf->{$gid}{num} += 1;
+		$horf->{$gid}{fasta} .= ">".$ID."\n".$seq."\n";
 	}
+}
+
+my $hgff = {};
+my $t2g = {};
+if(-e $rfile_gff){
+#	print " reading [$rfile_gff]...\n";
+	open(my $fh, "<", $rfile_gff);
+	while(my $line = <$fh>){
+		$line =~ s/\n//;
+		$line =~ s/\r//;
+		
+		if($line){
+			my @A = split(/\t/, $line);
+			my @tag = split(/\;/, $A[8]);
+			my $gid;
+			my $tid;
+			
+			if($A[2] eq 'gene'){
+				foreach my $val (@tag){
+					if($val =~ /ID\=/){
+						$gid = $val;
+						$gid =~ s/ID\=//;
+						last;
+					}
+				}
+				
+				my $tmp_qpref = $qpref."_";
+				my $gidx = $gid;
+				$gidx =~ s/$tmp_qpref//;
+				my @tmp = split(/_/, $gidx);
+				$gidx = $tmp[0];
+				
+				$hgff->{$gidx}{gene} = $line."\n";
+			}
+			elsif($A[2] eq 'mRNA' || $A[2] eq 'transcript'){
+				foreach my $val (@tag){
+					if($val =~ /ID\=/){
+						$tid = $val;
+						$tid =~ s/ID\=//;
+					}
+					if($val =~ /Parent\=/){
+						$gid = $val;
+						$gid =~ s/Parent\=//;
+					}
+					if($tid && $gid){
+						last;
+					}
+				}
+				
+				my $tmp_qpref = $qpref."_";
+				my $gidx = $gid;
+				$gidx =~ s/$tmp_qpref//;
+				my @tmp = split(/_/, $gidx);
+				$gidx = $tmp[0];
+				
+				$t2g->{$tid} = $gidx;
+				$hgff->{$gidx}{transcript} = $line."\n";
+			}
+			else{
+				foreach my $val (@tag){
+					if($val =~ /Parent\=/){
+						$tid = $val;
+						$tid =~ s/Parent\=//;
+						last;
+					}
+				}
+				if(! $tid){
+					print "! missing tid\n$line\n";
+				}
+				else{
+					my $gidx = $t2g->{$tid};
+					$hgff->{$gidx}{CDSexon} .= $line."\n";
+				}
+			}
+		}
+	}
+	close $fh;
 }
 
 if(-e $file){
@@ -1581,6 +2112,18 @@ if(-e $file){
 				$A[25] = "-";
 			}
 			if($A[22] =~ /present/ || $A[22] =~ /insert/){
+				my $null_gff = 0;
+				if($horf->{$A[23]}{fasta}){
+					if(! $hgff->{$A[23]}{gene} || ! $hgff->{$A[23]}{transcript}){
+#						print " - found fasta but missing Gff for [$A[23]]...\n";
+						$null_gff = 1;
+						$hash->{missing_gff} += 1;
+					}
+					else{
+						$hash->{with_gff} += 1;
+					}
+				}
+				
 				if($j == 0){
 					if($A[22] !~ /collapse/ && $A[22] !~ /partly/ && $A[22] !~ /insert/){
 						if($A[34] && $A[34] ne '0' && $A[34] ne '.' && $A[34] ne '-'){
@@ -1589,6 +2132,9 @@ if(-e $file){
 							
 							if($horf->{$A[23]}{fasta}){
 								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+								if($null_gff == 0){
+									$hash->{$A[23]}{pgff} = $hgff->{$A[23]}{gene}.$hgff->{$A[23]}{transcript}.$hgff->{$A[23]}{CDSexon};
+								}
 							}
 						}
 						else{
@@ -1597,6 +2143,9 @@ if(-e $file){
 							
 							if($horf->{$A[23]}{fasta}){
 								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+								if($null_gff == 0){
+									$hash->{$A[23]}{pgff} = $hgff->{$A[23]}{gene}.$hgff->{$A[23]}{transcript}.$hgff->{$A[23]}{CDSexon};
+								}
 							}
 						}
 					}
@@ -1621,6 +2170,9 @@ if(-e $file){
 							
 							if($horf->{$A[23]}{fasta}){
 								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+								if($null_gff == 0){
+									$hash->{$A[23]}{pgff} = $hgff->{$A[23]}{gene}.$hgff->{$A[23]}{transcript}.$hgff->{$A[23]}{CDSexon};
+								}
 							}
 						}
 						else{
@@ -1629,6 +2181,9 @@ if(-e $file){
 							
 							if($horf->{$A[23]}{fasta}){
 								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+								if($null_gff == 0){
+									$hash->{$A[23]}{pgff} = $hgff->{$A[23]}{gene}.$hgff->{$A[23]}{transcript}.$hgff->{$A[23]}{CDSexon};
+								}
 							}
 						}
 					}
@@ -1639,6 +2194,9 @@ if(-e $file){
 							
 							if($horf->{$A[23]}{fasta}){
 								$hash->{$A[23]}{orf} = $horf->{$A[23]}{fasta};
+								if($null_gff == 0){
+									$hash->{$A[23]}{pgff} = $hgff->{$A[23]}{gene}.$hgff->{$A[23]}{transcript}.$hgff->{$A[23]}{CDSexon};
+								}
 							}
 						}
 					}
@@ -2399,6 +2957,17 @@ if($str){
 
 
 #----------------------------------------------------------
+sub Rm{
+my $file = shift;
+
+if($file && -e $file){
+	system("rm $file");
+}
+
+}
+
+
+#----------------------------------------------------------
 sub SAVE{
 my $file = shift;
 my $str = shift;
@@ -2605,4 +3174,338 @@ if(-e $tmp){
 
 return $judge;
 }
+
+
+#-------------------------------------------------------------------------------
+sub Read_aliaslist{
+my $file = shift;
+
+print "\n! reading [$file] ...\n";
+open(my $fh, "<", $file) or die;
+my $hash = {};
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+		next;
+	}
+	my @A = split(/,/, $line);
+	
+	if($A[0] && $A[1] && $A[0] ne $A[1]){
+		if($A[0] =~ /\.fa/ || $A[1] =~ /\.fa/){
+			if(! $hash->{fasta0} && ! $hash->{fasta1}){
+				$hash->{fasta0} = $A[0];
+				$hash->{fasta1} = $A[1];
+				
+				$A[0] =~ s/\.fasta//;
+				$A[1] =~ s/\.fasta//;
+				$A[0] =~ s/\.fa//;
+				$A[1] =~ s/\.fa//;
+				$hash->{prefix0} = $A[0];
+				$hash->{prefix1} = $A[1];
+				print " $A[0] -> $A[1] (fasta)\n";
+			}
+		}
+		else{
+			if(! $hash->{f}{$A[0]} && ! $hash->{r}{$A[1]}){
+				$hash->{f}{$A[0]} = $A[1];
+				$hash->{r}{$A[1]} = $A[0];
+				print " $A[0] -> $A[1]\n";
+			}
+			elsif($hash->{f}{$A[0]}){
+				print "! duplicated ID alias for [$A[0]]\n";
+				$hash->{err} = 1;
+				last;
+			}
+			elsif($hash->{r}{$A[1]}){
+				print "! duplicated ID alias for [$A[1]]\n";
+				$hash->{err} = 1;
+				last;
+			}
+		}
+	}
+}
+close $fh;
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Check_IDalias_fasta{
+my $file = shift;
+my $halias = shift;
+my $str = shift;
+
+print "! reading $str refseq [$file]...\n";
+open(my $fh, "<", $file) or die;
+my $hash = {};
+my $cnt = 0;
+my $ID;
+my $seq;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+		next;
+	}
+	
+	my @A = split(/\t/, $line);
+	if($line =~ /\>/){
+		if($seq){
+			if($hash->{$ID}){
+				print "! duplicated seq ID : [$ID]\n";
+			}
+			elsif(! $halias->{$ID}){
+				print "! missing ID alias for [$ID]\n";
+				$hash->{err} += 1;
+			}
+			else{
+				my $len = length($seq);
+				$hash->{$ID}{len} = $len;
+			}
+		}
+		
+		$ID = $line;
+		$ID =~ s/\>//;
+		my @tmp = split(/\s/, $ID);
+		$ID = $tmp[0];
+		$seq = "";
+		$cnt++;
+	}
+	else{
+		$line =~ s/\.//g;
+		if($line){
+			$seq .= $line;
+		}
+	}
+}
+close $fh;
+
+if($seq){
+	if($hash->{$ID}){
+		print "! duplicated seq ID : [$ID]\n";
+	}
+	elsif(! $halias->{$ID}){
+		print "! missing ID alias for [$ID]\n";
+		$hash->{err} += 1;
+	}
+	else{
+		my $len = length($seq);
+		$hash->{$ID}{len} = $len;
+	}
+}
+
+print " - [$cnt] sequence ID\n";
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Revise_Psl{
+my $file = shift;
+my $halias = shift;
+my $prefix_prev = shift;
+my $prefix_new = shift;
+my $qpref = shift;
+
+open(my $fh, "<", $file) or die;
+my $hash = {};
+my $cnt = 0;
+my $cntr = 0;
+my $ID;
+my $seq;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+		next;
+	}
+	my @A = split(/\t/, $line);
+	if(! $halias->{$A[13]}){
+		print "! missing ID alias for [$A[13]]\n";
+		$hash->{err} += 1;
+		last;
+	}
+	else{
+		$A[13] = $halias->{$A[13]};
+		$cnt++;
+	}
+	
+	if($qpref eq $prefix_prev){
+		if(! $halias->{$A[9]}){
+			print "! missing ID alias for [$A[9]]\n";
+			$hash->{err} += 1;
+			last;
+		}
+		else{
+			$A[9] = $halias->{$A[9]};
+			$cntr++;
+		}
+	}
+	
+	$hash->{lines} .= join("\t", @A)."\n";
+}
+close $fh;
+
+if($qpref eq $prefix_prev){
+	print "! [$cnt / $cntr] lines updated in [$file] (*self alignment)\n";
+}
+else{
+	print "! [$cnt] lines updated in [$file]\n";
+}
+
+my $rfile = $file;
+if($file =~ /\//){
+	my @D = split(/\//, $file);
+	my $nD = @D;
+	$rfile = pop(@D);
+	
+	if($rfile =~ /$prefix_prev/){
+		$rfile =~ s/\.psl//;
+		$rfile =~ s/$prefix_prev/$prefix_new/g;
+		$rfile .= "_updated.psl";
+	}
+	else{
+		$rfile =~ s/\.psl//;
+		$rfile .= $prefix_new."_updated.psl";
+	}
+	$rfile = join("/", @D)."/".$rfile;
+}
+else{
+	if($rfile =~ /$prefix_prev/){
+		$rfile =~ s/\.psl//;
+		$rfile =~ s/$prefix_prev/$prefix_new/g;
+		$rfile .= "_updated.psl";
+	}
+	else{
+		$rfile =~ s/\.psl//;
+		$rfile .= $prefix_new."_updated.psl";
+	}
+}
+#print "! update [$file] > [$rfile]\n";
+
+$hash->{updated_psl} = $rfile;
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Check_IDalias_gff{
+my $file = shift;
+my $halias = shift;
+my $str = shift;
+
+print "! reading $str Gff [$file]...\n";
+open(my $fh, "<", $file) or die;
+my $hash = {};
+my $cnt = 0;
+my $ID;
+my $seq;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+		next;
+	}
+	my @CHAR = split(//, $line);
+	if($CHAR[0] eq '#'){
+		next;
+	}
+	
+	my @A = split(/\t/, $line);
+	if(! $halias->{$A[0]}){
+		print "! missing ID alias for [$A[0]]\n";
+		$hash->{err} += 1;
+		last;
+	}
+	$cnt++;
+}
+close $fh;
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub ChecksvHeader{
+my $file = shift;
+my $hash = shift;
+
+#print " reading [$file]...\n";
+if(-e $file){
+	open(my $fh, "<", $file) or die;
+	my $cnt = 0;
+	my $neighbor_tlen = "null";
+	while(my $line = <$fh>){
+		$line =~ s/\n//;
+		$line =~ s/\r//;
+		
+		unless($line){
+			next;
+		}
+		if($cnt == 0){
+			$hash->{header} = $line;
+			
+			my @A = split(/\t/, $line);
+			foreach my $val (@A){
+				if($val =~ /\(/ && $val =~ /bp\)/){
+					my @tmp0 = split(/\(/, $val);
+					if($tmp0[1]){
+						my @tmp1 = split(/\)/, $tmp0[1]);
+						if($tmp1[0]){
+							$tmp1[0] =~ s/bp//;
+							$tmp1[0] =~ s/\s//g;
+							if($tmp1[0] =~ /\d/ && $tmp1[0] !~ /\D/){
+								$neighbor_tlen = $tmp1[0];
+								$hash->{neighbor_tlen}{$neighbor_tlen} += 1;
+							}
+						}
+					}
+				}
+			}
+			last;
+		}
+		$cnt++;
+	}
+	close $fh;
+}
+
+return $hash;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Prefix_Gff{
+my $file = shift;
+
+my @PRF = split(/\//, $file);
+my $num_PRF = @PRF;
+my $prefix = $PRF[$num_PRF - 1];
+$prefix =~ s/\.gff3//;
+$prefix =~ s/\.gff//;
+
+return $prefix;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Prefix_fasta{
+my $file = shift;
+
+my @PRF = split(/\//, $file);
+my $num_PRF = @PRF;
+my $prefix = $PRF[$num_PRF - 1];
+$prefix =~ s/\.fasta//;
+$prefix =~ s/\.fa//;
+
+return $prefix;
+}
+
 
