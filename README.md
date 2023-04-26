@@ -50,7 +50,7 @@ We have validated the Asm2sv pipeline with the following environment:
 <sup>[*3] These can be installed with `miniconda3` in which `bioconda` and `conda-forge` channels are added.</sup>  
 <sup>[*4] These can be installed with `apt-get install` command.</sup>  
 <sup>[*5] Included in the bin directory.</sup> 
-<sup>[*6] Download from github then compile to obtain program.</sup> 
+<sup>[*6] Download from github then compile to obtain program.</sup>
 ####
 
 <h2 id="Installation"># Installation</h2>
