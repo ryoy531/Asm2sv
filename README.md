@@ -42,7 +42,7 @@ We have validated the Asm2sv pipeline with the following environment:
   - BLAST (2.10.1+ or higher)<sup>[*3]</sup>
   - LAST<sup>[*4]</sup>
   - matcher<sup>[*4]</sup>
-  - genome threader<sup>[*5]</sup>  
+  - genome threader<sup>[*5]</sup>
   - miniprot<sup>[*6]</sup>
 
 <sup>[*1] It may be necessary to install some modules with `cpan install` command.</sup>  
