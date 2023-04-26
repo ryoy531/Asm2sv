@@ -1569,6 +1569,12 @@ if(system("Rscript --vanilla --slave $R_file0 > /dev/null 2>&1") == 0){
 		print "! output [$img_file1]\n";
 		print "! output [$img_file2]\n";
 	}
+	elsif(-e $img_file1){
+		print "! output [$img_file1]\n";
+	}
+	elsif(-e $img_file2){
+		print "! output [$img_file2]\n";
+	}
 	else{
 		print "! executed but missing image files...\n";
 	}
