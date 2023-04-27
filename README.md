@@ -143,14 +143,14 @@ The above command will create a csv file named `summary_gene_reference_genome.cs
 ####
 
 ___
-#### Step.2 Run Asm2sv to compare reference and target genomes (an example of one-to-one comparison).  
-_*In case of comparing multiple target genomes, you may not need to perform this step. Please just read it._  
+#### Step.2 Run Asm2sv to compare reference and target genomes (an example of one-by-one comparison).  
 ```
 $ /path/to/Asm2sv run -r reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference_genome.csv -q sample_genome_1.fasta -o asm2sv_genome_1 -t 16 -x 16 -n 5000  
 ```
+*In case of using grid, add `--1` to the command line.  
 ####
 
-The result file will be `asm2sv_genome_1/rev_summary_genome2sv_sample_genome_1.tsv`. Some important columns are described below:  
+The result file of the above command will be `asm2sv_genome_1/rev_summary_genome2sv_sample_genome_1.tsv`. Some important columns are described below:  
 ####
 | column | string | meaning |
 | ------ | ------ | ------- |
