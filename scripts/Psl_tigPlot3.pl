@@ -585,7 +585,7 @@ if($q =~ /y/i || $q =~ /pipe/i){
 			APPEND($afile, $abhit_summary);
 		#	SAVE($bfile, $pav_summary);
 			
-			if($keep eq '0'){
+			if(! $keep){
 				Delete($dbfasta);
 				Delete($qfasta);
 				Delete($qtarget);
@@ -736,7 +736,7 @@ if($q =~ /y/i || $q =~ /pipe/i){
 		APPEND($afile, $abhit_summary);
 	#	SAVE($bfile, $pav_summary);
 		
-		if($keep eq '0'){
+		if(! $keep){
 			Delete($dbfasta);
 			Delete($qfasta);
 			Delete($qtarget);
@@ -2187,6 +2187,7 @@ sub Delete{
 my $file = shift;
 
 if($file && -e $file){
+#	print "rm $file\n";
 	system("rm $file");
 }
 
