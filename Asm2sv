@@ -2023,7 +2023,7 @@ if(-e $rfile_gff){
 		$line =~ s/\n//;
 		$line =~ s/\r//;
 		
-		if($line){
+		if($line && $line !~ /\#\#/){
 			my @A = split(/\t/, $line);
 			my @tag = split(/\;/, $A[8]);
 			my $gid;
