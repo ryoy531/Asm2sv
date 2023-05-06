@@ -9,8 +9,8 @@ use Getopt::Long;
 use Sys::Hostname;
 
 my $version = "#------------------------------------------------------------\n";
-$version .= "Asm2sv version 1.45\n";
-$version .= "last update: [2023\/3\/30]\n";
+$version .= "Asm2sv version 1.46\n";
+$version .= "last update: [2023\/5\/6]\n";
 $version .= "copyright: ryoichi yano\n";
 $version .= "#------------------------------------------------------------\n";
 
@@ -403,6 +403,11 @@ elsif($ARGV[0] eq 'run'){
 				}
 				print "! cmd=[$cmd]\n";
 				system($cmd);
+				
+				Delete_gabbage("./$subdir/$qpref/*.maf");
+				Delete_gabbage("./$subdir/$qpref/*.psl");
+				Delete_gabbage("./$subdir/$qpref/*.fasta");
+				Delete_gabbage("./$subdir/$qpref/*.blast");
 			}
 		}
 	}
@@ -3506,6 +3511,18 @@ $prefix =~ s/\.fasta//;
 $prefix =~ s/\.fa//;
 
 return $prefix;
+}
+
+
+#-------------------------------------------------------------------------------
+sub Delete_gabbage{
+my $str = shift;
+
+my @F = glob("$str");
+if(@F){
+	system("rm $str");
+}
+
 }
 
 
