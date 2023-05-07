@@ -1427,11 +1427,13 @@ while(my $line = <$fh>){
 			push(@{$AoG2}, \@tmp);
 		}
 		
-		$gh->{$gid}{header} = join("\t", @A)."\n";
 		$gh->{$gid}{pos0} = $A[3];
 		$gh->{$gid}{pos1} = $A[4];
 		$gh->{$gid}{method} = $A[1];
 		$gh->{$gid}{numTID} = 0;
+		
+		$A[1] = "Asm2sv";
+		$gh->{$gid}{header} = join("\t", @A)."\n";
 		$cnt_gid++;
 	}
 	elsif($A[2] eq 'transcript' || $A[2] eq 'mRNA'){
@@ -1448,9 +1450,11 @@ while(my $line = <$fh>){
 		
 		$g2t->{$gid} .= $tid."\n";
 		$gh->{$gid}{numTID} += 1;
-		$th->{$tid}{header} = join("\t", @A)."\n";
 		$th->{$tid}{pos0} = $A[3];
 		$th->{$tid}{pos1} = $A[4];
+		
+		$A[1] = "Asm2sv";
+		$th->{$tid}{header} = join("\t", @A)."\n";
 		$t2g->{$tid} = $gid;
 	}
 	elsif($A[2] eq 'CDS'){
