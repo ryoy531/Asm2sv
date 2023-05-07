@@ -461,6 +461,7 @@ elsif($ARGV[0] eq 'run'){
 	}
 	else{
 		Summarize_result($hcollect, $genelist, $dbpref, $qpref, $g2tdb, $rfile_final, $log_final, $neighbor_tlen, $skip_orfsearch, $rorf_final, $rgff_final);
+		FixGff($rgff_final);
 	}
 }
 elsif($ARGV[0] eq 'check'){
@@ -1368,6 +1369,207 @@ print $help_command;
 
 
 #-------------------------------------------------------------------------------
+sub FixGff{
+my $file = shift;
+
+unless(-e $file){
+	return;
+}
+
+my $backup = "_original_".$file;
+unless(-e $backup){
+	system("cp $file $backup");
+}
+
+print "! fix and sorting [$file]...\n";
+open(my $fh, "<", $file) or die;
+my $AoG1 = [];
+my $AoG2 = [];
+my $gh = {};
+my $th = {};
+my $t2g = {};
+my $g2t = {};
+my $cnt_gid = 0;
+while(my $line = <$fh>){
+	$line =~ s/\n//;
+	$line =~ s/\r//;
+	
+	unless($line){
+		next;
+	}
+	elsif($line =~ /\#/){
+		next;
+	}
+	
+	my @A = split(/\t/, $line);
+	my @tag = split(/\;/, $A[8]);
+	my $tid;
+	my $gid;
+	
+	if($A[2] eq 'gene'){
+		foreach my $val (@tag){
+			if($val =~ /ID\=/ && $val !~ /Alt/i){
+				$gid = $val;
+				$gid =~ s/ID\=//;
+				last;
+			}
+		}
+		
+		my @tmp;
+		push(@tmp, $gid);
+		push(@tmp, $A[0]);
+		push(@tmp, $A[3]);
+		
+		if($A[0] !~ /scaffold/i && $A[0] !~ /mithoch/i && $A[0] !~ /chloro/i){
+			push(@{$AoG1}, \@tmp);
+		}
+		else{
+			push(@{$AoG2}, \@tmp);
+		}
+		
+		$gh->{$gid}{header} = join("\t", @A)."\n";
+		$gh->{$gid}{pos0} = $A[3];
+		$gh->{$gid}{pos1} = $A[4];
+		$gh->{$gid}{method} = $A[1];
+		$gh->{$gid}{numTID} = 0;
+		$cnt_gid++;
+	}
+	elsif($A[2] eq 'transcript' || $A[2] eq 'mRNA'){
+		foreach my $val (@tag){
+			if($val =~ /ID\=/ && $val !~ /Alt/i){
+				$tid = $val;
+				$tid =~ s/ID\=//;
+			}
+			elsif($val =~ /Parent\=/ && $val !~ /Alt/i){
+				$gid = $val;
+				$gid =~ s/Parent\=//;
+			}
+		}
+		
+		$g2t->{$gid} .= $tid."\n";
+		$gh->{$gid}{numTID} += 1;
+		$th->{$tid}{header} = join("\t", @A)."\n";
+		$th->{$tid}{pos0} = $A[3];
+		$th->{$tid}{pos1} = $A[4];
+		$t2g->{$tid} = $gid;
+	}
+	elsif($A[2] eq 'CDS'){
+		foreach my $val (@tag){
+			if($val =~ /Parent\=/){
+				$tid = $val;
+				$tid =~ s/Parent\=//;
+				last;
+			}
+		}
+		
+		$th->{$tid}{CDS} .= join("\t", @A)."\n";
+	}
+	else{
+		foreach my $val (@tag){
+			if($val =~ /Parent\=/){
+				$tid = $val;
+				$tid =~ s/Parent\=//;
+				last;
+			}
+		}
+		
+		$th->{$tid}{other} .= join("\t", @A)."\n";
+	}
+}
+close $fh;
+
+#print "! [$cnt_gid] gene ID found in [$file]\n";
+
+@{$AoG1} = sort {$a->[2] <=> $b->[2]} @{$AoG1};
+@{$AoG1} = sort {$a->[1] cmp $b->[1]} @{$AoG1};
+@{$AoG2} = sort {$a->[2] <=> $b->[2]} @{$AoG2};
+@{$AoG2} = sort {$a->[1] cmp $b->[1]} @{$AoG2};
+
+my $rgff = "##gff-version 3\n";
+foreach my $tmp (@{$AoG1}){
+	my $gid = $tmp->[0];
+	my $method = $gh->{$gid}{method};
+	
+	unless($g2t->{$gid}){
+		next;
+	}
+	
+	my @TID = split(/\n/, $g2t->{$gid});
+	my $each_rgff;
+	foreach my $tid (@TID){
+		if($method =~ /gth/){
+			my $dline = $th->{$tid}{CDS};
+			if($th->{$tid}{other}){
+				$dline .= $th->{$tid}{other};
+			}
+			
+			my @L = split(/\n/, $dline);
+			my $AoL = [];
+			foreach my $line (@L){
+				my @A = split(/\t/, $line);
+				push(@{$AoL}, \@A);
+			}
+			@{$AoL} = sort{$a->[3] <=> $b->[3]} @{$AoL};
+			
+			$dline = "";
+			foreach my $A (@{$AoL}){
+				$A->[1] = "Asm2sv";
+				$dline .= join("\t", @{$A})."\n";
+			}
+			$each_rgff .= $th->{$tid}{header}.$dline;
+		}
+		elsif($method =~ /miniprot/){
+			my $dline = $th->{$tid}{CDS};
+			if($th->{$tid}{other}){
+				$dline .= $th->{$tid}{other};
+			}
+			
+			my @L = split(/\n/, $dline);
+			my $AoL = [];
+			foreach my $line (@L){
+				my @A = split(/\t/, $line);
+				
+				if($A[2] eq 'CDS'){
+					my @B = @A;
+					$B[2] = "exon";
+					my @tag = split(/\;/, $B[8]);
+					$tag[0] =~ s/\.CDS/\.exon/;
+					$B[8] = join("\;", @tag);
+					push(@{$AoL}, \@B);
+				}
+				elsif($A[2] eq 'exon'){
+					next;
+				}
+				push(@{$AoL}, \@A);
+			}
+			@{$AoL} = sort{$a->[3] <=> $b->[3]} @{$AoL};
+			
+			$dline = "";
+			foreach my $A (@{$AoL}){
+				$A->[1] = "Asm2sv";
+				$dline .= join("\t", @{$A})."\n";
+			}
+			$each_rgff .= $th->{$tid}{header}.$dline;
+		}
+	}
+	
+	if($each_rgff){
+		$rgff .= $gh->{$gid}{header};
+		$rgff .= $each_rgff;
+	}
+}
+
+if($rgff){
+	open(my $rfh, ">", $file);
+	print $rfh $rgff;
+	close $rfh;
+	print "! revised [$file]\n";
+}
+
+}
+
+
+#-------------------------------------------------------------------------------
 sub CheckORFsearch_prevresult{
 my $file = shift;
 
@@ -1977,6 +2179,8 @@ if(-e $orf_fasta){
 	my $cnt = 0;
 	my $seg = 1000;
 	my $add = $seg;
+	my $msw = 0;
+	my $rfasta = "";
 	while(my $line = <$fh>){
 		$line =~ s/\n//;
 		$line =~ s/\r//;
@@ -1991,10 +2195,22 @@ if(-e $orf_fasta){
 				
 				$horf->{$gid}{num} += 1;
 				$horf->{$gid}{fasta} .= ">".$ID."\n".$seq."\n";
+				$rfasta .= ">".$ID."\n".$seq."\n";
 			}
 			
 			$ID = $line;
 			$ID =~ s/\>//;
+			if($ID =~ /_nuclear_nuclear/){
+				$msw = 1;
+				my @tmp = split(/_nuclear/, $ID);
+				my @RID;
+				foreach my $str (@tmp){
+					if($str){
+						push(@RID, $str);
+					}
+				}
+				$ID = join("_nuclear", @RID);
+			}
 			$seq = "";
 			$cnt++;
 		}
@@ -2016,6 +2232,14 @@ if(-e $orf_fasta){
 		
 		$horf->{$gid}{num} += 1;
 		$horf->{$gid}{fasta} .= ">".$ID."\n".$seq."\n";
+		$rfasta .= ">".$ID."\n".$seq."\n";
+	}
+	
+	if($rfasta && $msw eq '1'){
+		open(my $rfh, ">", $orf_fasta);
+		print $rfh $rfasta;
+		close $rfh;
+		print " [$orf_fasta] ID fixed\n";
 	}
 }
 
