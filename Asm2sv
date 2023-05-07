@@ -1448,6 +1448,12 @@ while(my $line = <$fh>){
 			}
 		}
 		
+		if($gid =~ /_gthTarget=mRNA/){
+			my @tmp = split(/_gthTarget=mRNA/, $gid);
+			$gid = $tmp[0]."_gth";
+			$A[8] = "ID=".$tid."\;Parent=".$gid;
+		}
+		
 		$g2t->{$gid} .= $tid."\n";
 		$gh->{$gid}{numTID} += 1;
 		$th->{$tid}{pos0} = $A[3];
@@ -1491,6 +1497,78 @@ close $fh;
 
 my $rgff = "##gff-version 3\n";
 foreach my $tmp (@{$AoG1}){
+	my $gid = $tmp->[0];
+	my $method = $gh->{$gid}{method};
+	
+	unless($g2t->{$gid}){
+		next;
+	}
+	
+	my @TID = split(/\n/, $g2t->{$gid});
+	my $each_rgff;
+	foreach my $tid (@TID){
+		if($method =~ /gth/){
+			my $dline = $th->{$tid}{CDS};
+			if($th->{$tid}{other}){
+				$dline .= $th->{$tid}{other};
+			}
+			
+			my @L = split(/\n/, $dline);
+			my $AoL = [];
+			foreach my $line (@L){
+				my @A = split(/\t/, $line);
+				push(@{$AoL}, \@A);
+			}
+			@{$AoL} = sort{$a->[3] <=> $b->[3]} @{$AoL};
+			
+			$dline = "";
+			foreach my $A (@{$AoL}){
+				$A->[1] = "Asm2sv";
+				$dline .= join("\t", @{$A})."\n";
+			}
+			$each_rgff .= $th->{$tid}{header}.$dline;
+		}
+		elsif($method =~ /miniprot/){
+			my $dline = $th->{$tid}{CDS};
+			if($th->{$tid}{other}){
+				$dline .= $th->{$tid}{other};
+			}
+			
+			my @L = split(/\n/, $dline);
+			my $AoL = [];
+			foreach my $line (@L){
+				my @A = split(/\t/, $line);
+				
+				if($A[2] eq 'CDS'){
+					my @B = @A;
+					$B[2] = "exon";
+					my @tag = split(/\;/, $B[8]);
+					$tag[0] =~ s/\.CDS/\.exon/;
+					$B[8] = join("\;", @tag);
+					push(@{$AoL}, \@B);
+				}
+				elsif($A[2] eq 'exon'){
+					next;
+				}
+				push(@{$AoL}, \@A);
+			}
+			@{$AoL} = sort{$a->[3] <=> $b->[3]} @{$AoL};
+			
+			$dline = "";
+			foreach my $A (@{$AoL}){
+				$A->[1] = "Asm2sv";
+				$dline .= join("\t", @{$A})."\n";
+			}
+			$each_rgff .= $th->{$tid}{header}.$dline;
+		}
+	}
+	
+	if($each_rgff){
+		$rgff .= $gh->{$gid}{header};
+		$rgff .= $each_rgff;
+	}
+}
+foreach my $tmp (@{$AoG2}){
 	my $gid = $tmp->[0];
 	my $method = $gh->{$gid}{method};
 	
