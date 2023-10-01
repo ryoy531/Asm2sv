@@ -19,7 +19,7 @@ Recommend (genome size >500 Mb)
 - CPU: 32 core/64 threads (e.g. AMD ryzen threadripper)
 - RAM: >256 GB
 
-*SSD disk is highly recommended in both cases.  
+*SSD disk is recommended in both cases.  
 ####
 
 <h2 id="Software_prerequisites"># Software prerequisites</h2>
