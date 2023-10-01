@@ -221,6 +221,7 @@ In the above command line of `Asm2sv makecmd`, a csv file named `list_for_batch_
 | 4 | qfasta | target fasta |
 | 5 | qpsl | `null` or specify .psl alignment file (optional) |
 | 6 | outdir | output directory |
+| 7 | custom_prefix | e.g. sample name |
 ####
 To save time, it is able to specify pre-obtained genomic alignment .psl file. It can be obtained with the following commands (may require >1 TB RAM in case of >500 Mb genome). If absent, just describe `null` in the column 4.  
 ```
