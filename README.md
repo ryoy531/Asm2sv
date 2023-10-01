@@ -60,7 +60,10 @@ Download zip or type the following git command:
 $ git clone https://github.com/ryoy531/Asm2sv.git
 ```
 ####
-
+Change permission:
+```
+$ chmod 755 -R /path/to/Asm2sv
+```
 By the following command, you can check whether all required programs are in your PATH.
 ```
 $ /path/to/Asm2sv check
