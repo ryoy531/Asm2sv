@@ -9,7 +9,7 @@ Asm2sv is an assembly-based comparative genomics pipeline designed to analyze ge
 [Citation](#Citation)  
 ####
 
-<h2 id="System_requirements">#System requirements</h2>
+<h2 id="#System_requirements"># System requirements</h2>
 
 Minimum (small genome)  
 - CPU: 16 core/32 threads (e.g. AMD ryzen 5950x)
