@@ -135,6 +135,8 @@ The above command will create a csv file named `summary_gene_reference_genome.cs
 | 3 | pos0 | start position |
 | 4 | pos1 | end position |
 | 5 | strand | direction |
+| 6 | num_variant | number of transcript variant |
+| 7 | total_num_CDS | number of CDS record |
 
 <sup>[Note] It is also able to use manually prepared list table.</sup>    
 ####
@@ -174,7 +176,12 @@ The result file of the above command will be `asm2sv_genome_1/rev_summary_genome
 | 38 | %gap | %gappped sequence between reference and target genes |
 | 39 | score | matcher's score for protein sequence alignment |
 ####
-- Among these columns, scores in the columns 20-22 are important as they represent the degree of conservation (or disruption) for the gene. If score is close to 1.0, it means gene sequence is conserved in target genome (judged as `present`).  
+- Among these columns, scores in the columns 20-23 are important as they represent the degree of conservation (or disruption) for the gene. If score is close to 1.0, it means gene sequence is conserved in target genome (judged as `present`). Meanings of some other representative judge tag are as follows:  
+ `present but not n-BDBH` = Candidate genomic region was found in the target genome for the query gene but it was not bidirectional best hit in BLASTn (possibly tandemly duplicated gene with similar function).  
+ `present but missing ORF` = Bidirectional best hit (BDBH) genomic region was found in the target genome for the query gene but ORF prediction was faield possibly because it is basend on protein alignment.  
+ `present (collapsed or partly)` = BDBH genomic region was found but it was partially collapsed.  
+ `no hit but some...` = Candidate genomic region was only partially found but collapsed.  
+ `absent or missing border` = Candidate genomic region was not found or collapsed.
 - In case of comparing multiple target genomes, these scores can be combined to generate a numeric genotype table (SV score table) through the `unite` command (see below).  
 - Protein sequence is predicted in target genome regardless of its Gff.  
 ####
