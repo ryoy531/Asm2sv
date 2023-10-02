@@ -70,7 +70,7 @@ If it returns the following message, installation is no problem.
 
 <h2 id="Command_options">Command options</h2>
 
-Asm2sv has multiple command options as described below. Detailed usage is introduced in the Tutorial section (please check it too).  
+Asm2sv has multiple command options as described below. Detailed usage is introduced in the Tutorial section (see below).  
 ####
 - `gfftolist` produces a gene query list file based on reference Gff3 file. The output list file can be used in the `run` command.
 ```
@@ -176,12 +176,14 @@ The result file of the above command will be `asm2sv_genome_1/rev_summary_genome
 | 38 | %gap | %gappped sequence between reference and target genes |
 | 39 | score | matcher's score for protein sequence alignment |
 ####
-- Among these columns, scores in the columns 20-23 are important as they represent the degree of conservation (or disruption) for the gene. If score is close to 1.0, it means gene sequence is conserved in target genome (judged as `present`). Meanings of some other representative judge tag are as follows:  
+- Among these columns, scores in the columns 20-23 are important as they represent the degree of conservation (or disruption) for the gene. If score is close to 1.0, it means gene sequence is conserved in target genome (judged as `present`). Meanings of other representative judge tags are as follows:  
+ --  
  `present but not n-BDBH` = Candidate genomic region was found in the target genome for the query gene but it was not bidirectional best hit in BLASTn (possibly tandemly duplicated gene with similar function).  
  `present but missing ORF` = Bidirectional best hit (BDBH) genomic region was found in the target genome for the query gene but ORF prediction was faield possibly because it is basend on protein alignment.  
  `present (collapsed or partly)` = BDBH genomic region was found but it was partially collapsed.  
  `no hit but some...` = Candidate genomic region was only partially found but collapsed.  
- `absent or missing border` = Candidate genomic region was not found or collapsed.
+ `absent or missing border` = Candidate genomic region was not found or collapsed.  
+ --  
 - In case of comparing multiple target genomes, these scores can be combined to generate a numeric genotype table (SV score table) through the `unite` command (see below).  
 - Protein sequence is predicted in target genome regardless of its Gff.  
 ####
@@ -223,13 +225,6 @@ In the above command line of `Asm2sv makecmd`, a csv file named `list_for_batch_
 | 6 | outdir | output directory |
 | 7 | custom_prefix | e.g. sample name |
 ####
-To save time, it is able to specify pre-obtained genomic alignment .psl file. It can be obtained with the following commands (may require >1 TB RAM in case of >500 Mb genome). If absent, just describe `null` in the column 4.  
-```
-$ lastdb [reference prefix] [reference fasta]  
-$ lastal [reference prefix] [target fasta] | last-split -s 35 > [alignment maf]  
-$ maf-convert psl [alignment maf] > [alignment psl]
-```
-
 If all jobs are finished, the following files will be created.
 ```
 $ ls asm2sv_*/rev_summary_*  
@@ -237,6 +232,13 @@ $ ls asm2sv_*/rev_summary_*
   asm2sv_genome_2/rev_summary_genome2sv_sample_genome_2.tsv  
   asm2sv_genome_3/rev_summary_genome2sv_sample_genome_3.tsv  
   asm2sv_reference/rev_summary_genome2sv_reference_genome.tsv
+```
+--  
+[optional] To save computing  time, user can specify preliminary analyzed genomic alignment data as hint (.psl file). It can be obtained with the following commands (may require >1 TB RAM in case of >500 Mb genome). If absent, just describe `null` in the column 4.  
+```
+$ lastdb [reference prefix] [reference fasta]  
+$ lastal [reference prefix] [target fasta] | last-split -s 35 > [alignment maf]  
+$ maf-convert psl [alignment maf] > [alignment psl]
 ```
 ####
 
@@ -266,26 +268,28 @@ In the `chrname_info.tsv` file, chromosome ID alias information is described lik
 The `Asm2sv unite` command produces several types of output files. They are dependent on differenct data summarizing policies.    
 - `A1`: Score approaches ‘0’ dependent on the degree of disruption regardless of indel.  
 - `A2`: Lower score (0 to 1) for deletion, larger score (>1) for insertion.  
-- `B1`: Output PAV scores for all genes (raw data including missing genotype).  
-- `B2`: Output PAV scores when structural variations were precisely determined by genomic alignments in all target assemblies (without missing genotype).  
 ####
 
 For example, the following data files are based on different combination of `policy A1 / A2` and `B1 / B2`.  
-| file name | combination | target | purpose |
-| --------- | ----------- | ------ | ------- |
-| val_disrupt_q-4.csv | `A1` x `B1` | gene region | rouhly evaluate disruption |
-| val_disrupt_1cnsv_q-4.csv | `A1` x `B2` | gene region | strictly compare disruption and pick up genes with PAV |
-| val_indel_q-4.csv | `A2` x `B1` | gene region | roughly evalute Indel |
-| val_indel_1cnsv_q-4.csv | `A2` x `B2` | gene region | strictly compare Indel, draw a clustering plot to analyze relationship |
-| promoter_indel_q-4.csv | `A2` x `B1` | promoter | roughly evalute Indel |
-| promoter_indel_1cnsv_q-4.csv | `A2` x `B2` | promoter | strictly compare Indel |
-| 3UTR_indel_q-4.csv | `A2` x `B1` | 3'-UTR | roughly evalute Indel |
-| 3UTR_indel_1cnsv_q-4.csv | `A2` x `B2` | 3'-UTR | strictly compare Indel |
-| prot_q-4.csv | `A2` x `B1` | protein | rouhly evaluate changes in sequence |
-| prot_1cnsv_q-4.csv | `A2` x `B2` | protein | strictly compare changes in sequence |  
+| file name | type | target |
+| --------- | ----------- | ------ |
+| sum_disrupt_q-4.csv | `A1` | gene, promoter, and UTR |
+| gene_dirsupt_q-4.csv | `A1` | gene region |
+| promoter_disrupt_q-4.csv | `A1` | promoter |
+| 3UTR_disrupt_q-4.csv | `A1` | 3'-UTR |
+| sum_indel_q-4.csv | `A2` | sum of gene, promoter, and UTR |
+| gene_indel_q-4.csv | `A2` | gene region |
+| promoter_indel_q-4.csv | `A2` | promoter |
+| 3UTR_indel_q-4.csv | `A2` | 3'-UTR |
+| protein_q-4.csv | `A2` | protein (*trial) |
 ####
 
 <h2 id="Citation">Citation</h2>
-manuscript submitted.  
+
+This is pre-publication preview version that is aimed at evaluation before publication. If you access to applications and datasets, you agree to the following conditions.  
+(1) Please refrain from publication using the contens of this database and the genome reference dataset before our paper is published.  
+(2) Please refrain from disclosure to third parties without our permission.  
+(3) Pre-publication dataset may be updated or replaced without any notice.  
+
 
 
