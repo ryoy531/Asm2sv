@@ -1,9 +1,11 @@
 # Asm2sv
 Asm2sv is an assembly-based comparative genomics pipeline designed to analyze gene-level structural variations (SV) between distinct genomes. In Asm2sv, one reference genome is set as a base then analyze gene-level SV in target genome(s). It assumes comparison of genomes in the same or closely related species. The basic idea of Asm2sv originates from the expectation that different types of SV can be present within a gene between distinct genomes. For example, some may carry 5-kb insertion within a gene region while others do 1-kb deletion. Because it is difficult to compare such SVs across multiple genomes based on conventional variant call format (VCF), we developed the Asm2sv as an alternative method. By algorithmic genomic alignment analysis, the Asm2sv pipeline captures insertion, deletion, or translocation around each gene region including promoter and 3'-UTR then output numeric scores that represent the degree of conservation (or disruption) for the gene. The output SV scores can be united across multiple genomes to enable population-scale comparison. 
-  
-####
 
-<h2 id="System_requirements">System requirements</h2>
+[Link](#Citation)
+
+####
+<a id="System_requirements"></a>
+<h2>System requirements</h2>
 
 Minimum (small genome)  
 - CPU: 16 core/32 threads (e.g. AMD ryzen 5950x)
@@ -284,7 +286,8 @@ For example, the following data files are based on different combination of `pol
 | protein_q-4.csv | `A2` | protein (*trial) |
 ####
 
-<h2 id="Citation">Citation</h2>
+<a name="Citation"></a>
+<h2>Citation</h2>
 
 This is pre-publication preview version that is aimed at evaluation before publication. If you access to applications and datasets, you agree to the following conditions.  
 (1) Please refrain from publication using the contens of this database and the genome reference dataset before our paper is published.  
