@@ -43,7 +43,7 @@ We have validated the Asm2sv pipeline with the following environment:
   - blat<sup>[*3]</sup>
   - BLAST (2.10.1+ or higher)<sup>[*3]</sup>
   - LAST<sup>[*4]</sup>
-  - matcher (from emboss)<sup>[*3]</sup>
+  - matcher (from emboss)<sup>[*4]</sup>
   - genome threader<sup>[*5]</sup>
   - miniprot<sup>[*6]</sup>
 
