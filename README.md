@@ -17,8 +17,8 @@ Minimum (small genome)
 - RAM: >128 GB
 
 Recommend (genome size >500 Mb)
-- CPU: 32 core/64 threads (e.g. AMD ryzen threadripper)
-- RAM: >256 GB
+- CPU: 64 core/128 threads (e.g. AMD ryzen threadripper)
+- RAM: >512 GB
 
 *SSD disk is recommended in both cases.  
 ####
