@@ -272,12 +272,12 @@ In the `chrname_info.tsv` file, chromosome ID alias information is described lik
 | ------------- | -------- | ----------- |
 | reference_genome | chr01 | chr01 |
 | reference_genome | chr02 | chr02 |
-| sample_genome_1 | chr01 | chr01 |
-| sample_genome_1 | chr02 | chr02 |
-| sample_genome_2 | chr01 | glyma.Lee.gnm1.Gm01 |
-| sample_genome_2 | chr02 | glyma.Lee.gnm1.Gm02 |
-| sample_genome_3 | chr01 | Gm01 |
-| sample_genome_3 | chr02 | Gm02 |  
+| sample_genome_1 | chr01 | sample1_ch01 |
+| sample_genome_1 | chr02 | sample1_ch02 |
+| sample_genome_2 | chr01 | sample2chr1 |
+| sample_genome_2 | chr02 | sample2chr2 |
+| sample_genome_3 | chr01 | PREFIX202301 |
+| sample_genome_3 | chr02 | PREFIX202302 |  
 ####
 <sup>[Note] No header required.</sup>  
 
