@@ -178,19 +178,24 @@ The result file of the above command will be `./asm2sv_1/rev_summary_asm2sv_samp
 
 ___
 #### Step.2B Generate command lines for multiple target genomes (for parallel run of Asm2sv).  
-By using the 'makecmd' option of Asm2sv, you can prepare command lines of multiple target queries. To use this, you need to prepare a list file (.csv) that describes information of path of data files for reference and target genomes.  
+By using the 'makecmd' option of Asm2sv, you can prepare command lines of multiple target queries at once. To use this, you need to prepare a list file (.csv) that describes information of path of data files for reference and target genomes.  
 ```
-$ /path/to/Asm2sv makecmd -l list_for_batch_exec.csv -c chrname_info.tsv -t 16 -x 8 -n 5000 --vcf  
+# command line example of makecmd  
+$ /path/to/Asm2sv makecmd -l list_for_batch_exec.csv -c chrname_info.tsv --vcf -t 16 -x 8 -n 5000  
 ```
 ####
-
-This command will generate a bash script file named `cmd_asm2sv_list_for_batch_exec.sh ` in which multiple command lines are described.  
+*`-c chrname_info.tsv --vcf` means Asm2sv will output VCF data in addition to numeric score data.  
+  
+This command will generate a bash script file named `cmd_asm2sv_list_for_batch_exec.sh` in which multiple command lines are described.  
 ```
 $ cat cmd_asm2sv_list_for_batch_exec.sh  
-  /usr/local/pipeline/r6c1_Asm2sv/Asm2sv run -d reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference_genome.csv -q reference_genome.fasta -t 16 --neighbor 5000 -o asm2sv_reference
-  /usr/local/pipeline/r6c1_Asm2sv/Asm2sv run -d reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference_genome.csv -q sample_genome_1.fasta -t 16 --neighbor 5000 -o asm2sv_genome_1
-  /usr/local/pipeline/r6c1_Asm2sv/Asm2sv run -d reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference_genome.csv -q sample_genome_2.fasta -t 16 --neighbor 5000 -o asm2sv_genome_2
-  /usr/local/pipeline/r6c1_Asm2sv/Asm2sv run -d reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference_genome.csv -q sample_genome_3.fasta -t 16 --neighbor 5000 -o asm2sv_genome_3
+  /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q reference.fasta -t 16 -x 8 --neighbor 5000 -s reference.gff -o asm2sv_reference --dataID reference --vcf --chrinfo chrname_info.tsv  
+  /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample1.fasta -t 16 -x 8 --neighbor 5000 -s sample1.gff -o asm2sv_1 --dataID sample1 --vcf --chrinfo chrname_info.tsv  
+  /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample2.fasta -t 16 -x 8 --neighbor 5000 -s sample2.gff -o asm2sv_2 --dataID sample2 --vcf --chrinfo chrname_info.tsv  
+  /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample3.fasta -t 16 -x 8 --neighbor 5000 -s sample3.gff -o asm2sv_3 --dataID sample3 --vcf --chrinfo chrname_info.tsv  
+  /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample4.fasta -t 16 -x 8 --neighbor 5000 -s sample4.gff -o asm2sv_4 --dataID sample4 --vcf --chrinfo chrname_info.tsv  
+  /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample5.fasta -t 16 -x 8 --neighbor 5000 -s sample5.gff -o asm2sv_5 --dataID sample5 --vcf --chrinfo chrname_info.tsv  
+  /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample6.fasta -t 16 -x 8 --neighbor 5000 -s sample6.gff -o asm2sv_6 --dataID sample6 --vcf --chrinfo chrname_info.tsv  
 ```
 ####
 
