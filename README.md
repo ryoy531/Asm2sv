@@ -127,14 +127,15 @@ The above command will create a csv file named `summary_gene_reference.csv`. Col
 ####
 
 ___
-#### Step.2 Run Asm2sv to compare reference and target genomes (one-by-one comparison).  
+#### Step.2A Run Asm2sv to compare reference and target genome (an example of one-by-one analysis).  
 ```
-$ /path/to/Asm2sv run -r reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference.csv -q sample1.fasta -o asm2sv_1 -t 16 -x 8 -n 5000 --vcf  
+# command line example of comparing reference.fasta/GFF and sample1.fasta/GFF
+$ /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample1.fasta -s sample1.gff -o asm2sv_1 -t 16 -x 8 -n 5000  
 ```
 *In case of using SGE grid, add `--1` to the command line.  
 ####
 
-The result file of the above command will be `asm2sv_genome_1/rev_summary_genome2sv_sample_genome_1.tsv`. Some important columns are described below:  
+The result file of the above command will be `asm2sv_1/rev_summary_genome2sv_sample1.tsv`. Some important columns are described below:  
 ####
 | column | string | meaning |
 | ------ | ------ | ------- |
@@ -170,11 +171,11 @@ The result file of the above command will be `asm2sv_genome_1/rev_summary_genome
  `absent or missing border` = Candidate genomic region was not found or collapsed.  
  --  
 - In case of comparing multiple target genomes, these scores can be combined to generate a numeric genotype table (SV score table) through the `unite` command (see below).  
-- Protein sequence is predicted in target genome regardless of its Gff.  
+- Protein sequence is predicted in target genome regardless of its GFF (trial function).  
 ####
 
 ___
-#### Step.3 Prepare a bash script for batch execution of Asm2sv for multiple target genomes.  
+#### Step.2B Prepare a bash script for batch execution of Asm2sv for multiple target genomes.  
 _*In case of analyzing only one target genome, you don't need to perform this step. Please just read it._  
 ```
 $ /path/to/Asm2sv makecmd -i list_for_batch_exec.csv -t 16 -x 16 -n 5000  
