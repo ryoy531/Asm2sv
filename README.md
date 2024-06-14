@@ -303,6 +303,51 @@ For example, the following data files are based on different combination of `pol
 <sup>[[Back to TOP]](#TOP)</sup>  
 ####
 
+___
+#### Step.4 (optional) Prepare VCF for pangenome reference construction.  
+
+This step describes how to integrate Asm2sv's gene-SV VCF with those of cactus-pangenome then use it for pangenome reference construction. Because it relies on the functions of two third party tools `Minigraph-cactus` and `Vg`, user needs to cite these papers.  
+First, run `splitseq_run_cactus.pl` from Asm2sv pipeline to prepare VCF with `cactus-pangenome`. This script splits reference fasta and obtain VCF in each sequence entry. 
+```
+$ /path/to/Asm2sv/scripts/splitseq_run_cactus.pl -l list_for_batch_exec.csv -c chrname_info.tsv -t 64 -p 2
+```
+####
+<sup>*`-t` and `-p` specify the number of CPU threads and parallel partions, respectively.</sup>  
+<sup>*This will create a VCF file such as `./split_run_cactuspg/cactus_pangenome.vcf`.</sup>  
+
+Then, run `vcfintegrate_MCa2v.pl` to integrate Asm2sv's gene-SV VCF with those of cactus-pangenome. 
+```
+$ /path/to/Asm2sv/scripts/vcfintegrate_MCa2v.pl -b ./split_run_cactuspg/cactus_pangenome.vcf -l list_for_batch_exec.csv
+```
+####
+<sup>*`-b` specifies the result VCF of first command.</sup>  
+  
+```
+# check the result file
+$ du -hs ./integratedVCF_for_pangenome/cactus_pangenome_plus_combined_geneSV_6genomes.vcf
+  1.1M    ./integratedVCF_for_pangenome/cactus_pangenome_plus_combined_geneSV_6genomes.vcf
+```
+####
+
+In the result directory, you can find a bash script file named `example_command_vgconst.sh`. By running it, user can construct pangenome reference with Vg.
+```
+$ cd integratedVCF_for_pangenome  
+$ bash example_command_vgconst.sh
+$ du -hs examplePanRef.*
+  8.3M    examplePanRef.dist
+  8.3M    examplePanRef.gbwt
+  14M     examplePanRef.giraffe.gbz
+  265M    examplePanRef.min
+  8.0K    examplePanRef.snarls
+  12M     examplePanRef.vg
+  32M     examplePanRef.xg
+```
+####
+Files named `examplePanRef.***` can be used for pangenome resequencing study with Vg.  
+  
+<sup>[[Back to TOP]](#TOP)</sup>  
+####
+
 <a name="Citation"></a>
 <h2>Citation</h2>
 
