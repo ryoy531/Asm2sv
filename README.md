@@ -203,28 +203,56 @@ Then just run a script to start analysis.
 ```
 $ bash cmd_asm2sv_list_for_batch_exec.sh
 ```
-<sup>[Note] In case of large genome like 1 Gb, one command will take ~48 hours. Please use many-core CPU or PC cluster.</sup>  
+<sup>[Note] In case of large genome like 1 Gb, one command will take ~48 hours. Please use high-performance PC or PC cluster.</sup>  
 ####
 
-In the above command line of `Asm2sv makecmd`, a csv file named `list_for_batch_exec.csv` is specified as a list. Information in this file is described like below.
+In `list_for_batch_exec.csv`, each column should include the information like below.
 ####
 | column | string | meaning |
 | ------ | ------ | ------- |
 | 1 | dbfasta | reference fasta |
-| 2 | dbgff | reference Gff3 |
+| 2 | dbgff | reference GFF |
 | 3 | genelist | gene query list |
 | 4 | qfasta | target fasta |
-| 5 | qpsl | `null` or specify .psl alignment file (optional) |
-| 6 | outdir | output directory |
-| 7 | custom_prefix | e.g. sample name |
+| 5 | qgff | target GFF |
+| 6 | qpsl | `null` or specify .psl alignment file (optional) |
+| 7 | outdir | output directory |
+| 8 | custom_prefix | e.g. sample name |
 ####
+  
+In `chrname_info.tsv`, information should be described as follows.
+| genome_prefix | alias_ID | original_ID |
+| ------------- | -------- | ----------- |
+| reference | chr01 | chr01 |
+| reference | chr02 | chr02 |
+| sample1 chr01 | sample1_ch01 |
+| sample1 chr02 | sample1_ch02 |
+| sample2 chr01 | sample2_chr01 |
+| sample2 chr02 | sample2_chr02 |
+| sample3 chr01 | sample3ch1 |
+| sample3 chr02 | sample3ch2 |
+| sample4 chr01 | sample4chr1 |
+| sample4 chr02 | sample4chr2 |
+| sample5 chr01 | PREFIX1 |
+| sample5 chr02 | PREFIX2 |
+| sample6 chr01 | PREFIX202301 |
+| sample6 chr02 | PREFIX202302 |
+####
+<sup>*Header is not necessarily required.</sup>  
+<sup>*`genome_prefix` here is string except the file extention of fasta file (e.g. "sample1.fasta" -> "sample1").</sup>  
+  
 If all jobs are finished, the following files will be created.
 ```
+# numeric score data for gene-SV
 $ ls asm2sv_*/rev_summary_*  
   asm2sv_genome_1/rev_summary_genome2sv_sample_genome_1.tsv  
   asm2sv_genome_2/rev_summary_genome2sv_sample_genome_2.tsv  
   asm2sv_genome_3/rev_summary_genome2sv_sample_genome_3.tsv  
   asm2sv_reference/rev_summary_genome2sv_reference_genome.tsv
+
+# VCF data for gene-SV
+$ ls asm2sv_*/rev2sv/*.vcf
+
 ```
 --  
 [optional] To save computing  time, user can specify preliminary analyzed genomic alignment data as hint (.psl file). It can be obtained with the following commands (may require >1 TB RAM in case of >500 Mb genome). If absent, just describe `null` in the column 4.  
