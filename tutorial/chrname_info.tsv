@@ -1,0 +1,15 @@
+name_prefix	consensus_seqID	original_seqID
+reference	chr01	chr01
+reference	chr02	chr02
+sample1	chr01	sample1_ch01
+sample1	chr02	sample1_ch02
+sample2	chr01	sample2_chr01
+sample2	chr02	sample2_chr02
+sample3	chr01	sample3ch1
+sample3	chr02	sample3ch2
+sample4	chr01	sample4chr1
+sample4	chr02	sample4chr2
+sample5	chr01	PREFIX1
+sample5	chr02	PREFIX2
+sample6	chr01	PREFIX202301
+sample6	chr02	PREFIX202302

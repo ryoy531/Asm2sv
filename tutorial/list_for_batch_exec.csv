@@ -1,0 +1,8 @@
+dbfasta,dbgff,genelist,qfasta,qgff,qpsl,outdir,custom_prefix
+reference.fasta,reference.gff,summary_gene_reference.csv,reference.fasta,reference.gff,null,asm2sv_reference,reference
+reference.fasta,reference.gff,summary_gene_reference.csv,sample1.fasta,sample1.gff,null,asm2sv_1,sample1
+reference.fasta,reference.gff,summary_gene_reference.csv,sample2.fasta,sample2.gff,null,asm2sv_2,sample2
+reference.fasta,reference.gff,summary_gene_reference.csv,sample3.fasta,sample3.gff,null,asm2sv_3,sample3
+reference.fasta,reference.gff,summary_gene_reference.csv,sample4.fasta,sample4.gff,null,asm2sv_4,sample4
+reference.fasta,reference.gff,summary_gene_reference.csv,sample5.fasta,sample5.gff,null,asm2sv_5,sample5
+reference.fasta,reference.gff,summary_gene_reference.csv,sample6.fasta,sample6.gff,null,asm2sv_6,sample6
