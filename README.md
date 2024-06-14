@@ -47,7 +47,7 @@ We have validated the Asm2sv pipeline with the following environment:
   - minimap2 (2.26-r1175 or higher)<sup>[*3] [*a]</sup>
   - Sniffles2 (2.2 or higher)<sup>[*3] [*a]</sup>
   - genome threader<sup>[*5]</sup>
-  - miniprot<sup>[*6]</sup>  
+  - miniprot (0.12-r237 or higher)<sup>[*6]</sup>  
   - Minigraph-cactus (6.0.0)<sup>[*6] [*b]</sup>  
   - Vg (v1.54.0-1.55.0)<sup>[*6] [*b]</sup>  
 
