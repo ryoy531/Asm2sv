@@ -133,7 +133,7 @@ ___
 $ /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample1.fasta -s sample1.gff -o asm2sv_1 -t 16 -x 8 -n 5000  
 ```
 *`-n 5000` means Asm2sv will analyze 5000 bp flanking region in each gene.  
-*To output VCF, add `--vcf -c chrname_info.tsv` to the command line.  
+*To output VCF, add `--vcf -c chrname_info.tsv` to the command line. `chrname_info.tsv` is a file that describes "alias for sequence name" (see below).  
 *In case of using SGE grid, add `--1` to the command line.  
 ####
 
