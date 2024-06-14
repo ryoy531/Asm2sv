@@ -130,12 +130,13 @@ ___
 #### Step.2A Run Asm2sv to compare reference and target genome (an example of one-by-one analysis).  
 ```
 # command line example of comparing reference.fasta/GFF and sample1.fasta/GFF
+# `-n 5000` means Asm2sv will analyze 5000 bp flanking region in each gene.
 $ /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample1.fasta -s sample1.gff -o asm2sv_1 -t 16 -x 8 -n 5000  
 ```
 *In case of using SGE grid, add `--1` to the command line.  
 ####
 
-The result file of the above command will be `asm2sv_1/rev_summary_genome2sv_sample1.tsv`. Some important columns are described below:  
+The result file of the above command will be `./asm2sv_1/rev_summary_asm2sv_sample1.tsv`. Some important columns are described below:  
 ####
 | column | string | meaning |
 | ------ | ------ | ------- |
@@ -175,10 +176,10 @@ The result file of the above command will be `asm2sv_1/rev_summary_genome2sv_sam
 ####
 
 ___
-#### Step.2B Prepare a bash script for batch execution of Asm2sv for multiple target genomes.  
-_*In case of analyzing only one target genome, you don't need to perform this step. Please just read it._  
+#### Step.2B Generate command lines for multiple target genomes (for parallel run of Asm2sv).  
+By using the 'makecmd' option of Asm2sv, you can prepare command lines of multiple target queries. To use this, you need to prepare a list file (.csv) that describes information of path of data files for reference and target genomes.  
 ```
-$ /path/to/Asm2sv makecmd -i list_for_batch_exec.csv -t 16 -x 16 -n 5000  
+$ /path/to/Asm2sv makecmd -l list_for_batch_exec.csv -c chrname_info.tsv -t 16 -x 8 -n 5000 --vcf  
 ```
 ####
 
