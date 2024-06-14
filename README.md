@@ -330,7 +330,8 @@ $ du -hs ./integratedVCF_for_pangenome/cactus_pangenome_plus_combined_geneSV_6ge
 ####
 
 The resultant file `cactus_pangenome_plus_combined_geneSV_6genomes.vcf` includes not only SVs from cactus-pangenome but also those of Asm2sv. If they are overlapping, the script above keeps SVs of Asm2sv and discard another.  
-In the result directory, you can find a bash script file named `example_command_vgconst.sh`. By running it, user can construct pangenome reference with Vg.
+  
+In the result directory, you can also find a bash script file named `example_command_vgconst.sh`. By running it, user can construct pangenome reference with Vg.
 ```
 $ cd integratedVCF_for_pangenome  
 $ bash example_command_vgconst.sh
