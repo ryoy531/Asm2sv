@@ -47,18 +47,18 @@ We have validated the Asm2sv pipeline with the following environment:
   - minimap2 (2.26-r1175 or higher)<sup>[*3] [*a]</sup>
   - Sniffles2 (2.2 or higher)<sup>[*3] [*a]</sup>
   - genome threader<sup>[*5]</sup>
-  - miniprot<sup>[*6]</sup>
-  - Minigraph-cactus (6.0.0)<sup>[*6] [*b]</sup>
-  - Vg (v1.54.0-1.55.0)<sup>[*6] [*b]</sup>
+  - miniprot<sup>[*6]</sup>  
+  - Minigraph-cactus (6.0.0)<sup>[*6] [*b]</sup>  
+  - Vg (v1.54.0-1.55.0)<sup>[*6] [*b]</sup>  
 
 <sup>[*1] It may be necessary to install some modules with `cpan install` command.</sup>  
 <sup>[*2] They must be in your PATH.</sup>  
 <sup>[*3] These can be installed with `miniconda3`. `bioconda` and `conda-forge` channels are required.</sup>  
 <sup>[*4] These can be installed with `apt-get install` command.</sup>  
 <sup>[*5] Included in the bin directory.</sup>  
-<sup>[*6] Download from the github or web site of deverlopers.</sup>
-<sup>[*a] Required if using '--vcf' function.</sup>
-<sup>[*b] Required if preparing and using VCF for pangenome construction.</sup>
+<sup>[*6] Download from the github or web site of deverlopers.</sup>  
+<sup>[*a] Required if using '--vcf' function.</sup>  
+<sup>[*b] Required if preparing and using VCF for pangenome construction.</sup>  
   
 <sup>[[Back to TOP]](#TOP)</sup>  
 ####
