@@ -109,9 +109,9 @@ $ ls      #check files
   
 $ /path/to/Asm2sv gfftolist -g reference.gff      #This will create query list csv
 ```
-<sup>[Note] These genome fasta/GFF files originated from soybean genomes (see citaiton). These data was prunned to use in this tutorial.</sup>    
+<sup>[Note] These genome fasta/GFF files originated from soybean genomes (see citaiton). These data was pruned to use in this tutorial.</sup>    
 
-The above command will create a csv file named `summary_gene_reference_genome.csv`. Important columns are described below:  
+The above command will create a csv file named `summary_gene_reference.csv`. Columns in this data are described below:  
 ####
 | column | string | meaning |
 | ------ | ------ | ------- |
@@ -123,15 +123,15 @@ The above command will create a csv file named `summary_gene_reference_genome.cs
 | 6 | num_variant | number of transcript variant |
 | 7 | total_num_CDS | number of CDS record |
 
-<sup>[Note] It is also able to use manually prepared list table.</sup>    
+<sup>[Note] You can pick up gene entries and delete others.</sup>    
 ####
 
 ___
-#### Step.2 Run Asm2sv to compare reference and target genomes (an example of one-by-one comparison).  
+#### Step.2 Run Asm2sv to compare reference and target genomes (one-by-one comparison).  
 ```
-$ /path/to/Asm2sv run -r reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference_genome.csv -q sample_genome_1.fasta -o asm2sv_genome_1 -t 16 -x 16 -n 5000  
+$ /path/to/Asm2sv run -r reference_genome.fasta -g reference_genome.gff3 -l summary_gene_reference.csv -q sample1.fasta -o asm2sv_1 -t 16 -x 8 -n 5000 --vcf  
 ```
-*In case of using grid, add `--1` to the command line.  
+*In case of using SGE grid, add `--1` to the command line.  
 ####
 
 The result file of the above command will be `asm2sv_genome_1/rev_summary_genome2sv_sample_genome_1.tsv`. Some important columns are described below:  
