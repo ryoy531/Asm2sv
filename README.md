@@ -107,9 +107,9 @@ $ ls      #check files
   sample5.fasta, sample5.gff  
   sample6.fasta, sample6.gff  
   
-$ /path/to/Asm2sv gfftolist -g reference_genome.gff3      #This will create query list csv
+$ /path/to/Asm2sv gfftolist -g reference.gff      #This will create query list csv
 ```
-<sup>[Note] Some genome fasta files in the tutorial directory originate from publicly available data. We have modified them to reduce the file sizes.</sup>    
+<sup>[Note] These genome fasta/GFF files originated from soybean genomes (see citaiton). These data was prunned to use in this tutorial.</sup>    
 
 The above command will create a csv file named `summary_gene_reference_genome.csv`. Important columns are described below:  
 ####
