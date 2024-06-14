@@ -87,49 +87,10 @@ If it returns the following message, installation is no problem.
 <sup>[[Back to TOP]](#TOP)</sup>  
 ####
 
-<h2 id="Command_options">Command options</h2>
-
-Asm2sv has multiple command options as described below. Detailed usage is introduced in the Tutorial section (see below).  
-####
-- `gfftolist` produces a gene query list file based on reference Gff3 file. The output list file can be used in the `run` command.
-```
-$ /path/to/Asm2sv gfftolist -g [reference Gff3]
-```
-<sup>[Note] A gene query list file can be manually prepared by yourself. But, it is easier to use the above command if you have Gff annotation file.</sup> 
-####  
-- `run` analyzes gene-level SVs present in target genome by comparing with reference genome.
-```
-$ /path/to/Asm2sv run -d [reference fasta] -g [reference Gff3] -l [gene query list] -q [target fasta] -o [working directory] -t [CPU1] -x [CPU2] -n 5000
-```
-<sup>`-t` specifies CPU threads used for genomic alignment analysis.</sup>  
-<sup>`-x` specifies CPU threads used for gene prediction with genome threader.</sup>  
-<sup>`-n` specifies the length of promoter and 3'-UTR region for which SV scores will be independently calculated.</sup>  
-####
-- `makecmd` produces a couple of command lines which can be used for analysis of multiple target genomes.
-```
-$ /path/to/Asm2sv makecmd -i [list of target genome (.csv)] -t [CPU1] -x [CPU2] -n 5000
-```
-<sup>`-i` specifies a csv file in which information of reference fasta, reference Gff, query list csv, target fasta, and output directory are described (see Tutorial section for detail).</sup>  
-####  
-- `unite` combines the results of multiple target genomes to compare genotype in a population scale.
-```
-$ /path/to/Asm2sv unite -i [list of target genome (.csv)] -c [information of chromosome ID alias (.tsv)]
-```
-####
-- `plot` produces .png image file(s) showing genomic alignment of specified gene region including its flanking sequences.
-```
-$ /path/to/Asm2sv run -d [reference fasta] -g [reference Gff3] -q [list of target fasta (.csv or .txt)] -i [gene query list] -o [working directory] -t [CPU1] -f [flanking seq length] -n 5000
-```
-<sup>`-f` specifies the length of flanking sequence that is shown in genomic alignment plot (.png image file) together with gene region.</sup>  
-<sup>Four png files are generated in each query gene.</sup>  
-  
-<sup>[[Back to TOP]](#TOP)</sup>  
-####
-  
 <a name="Tutorial"></a>
 <h2>Tutorial</h2>
 
-Basic usage of Asm2sv is introduced in this section.  
+The fastest way to explain about the usage of Asm2sv is using tutorial data. Basic procedure to run Asm2sv is described in this section together with command lines.  
 ___
 #### Step.1 Move to the directory `tutorial` then prepare a gene query list file from Gff.
 ```
