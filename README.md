@@ -99,11 +99,13 @@ $ unzip tutorial_****.zip
 $ ls      #check files  
   chrname_info.tsv  
   list_for_batch_exec.csv  
-  reference_genome.fasta  
-  reference_genome.gff3  
-  sample_genome_1.fasta  
-  sample_genome_2.fasta  
-  sample_genome_3.fasta 
+  reference.fasta, reference.gff  
+  sample1.fasta, sample1.gff  
+  sample2.fasta, sample2.gff  
+  sample3.fasta, sample3.gff  
+  sample4.fasta, sample4.gff  
+  sample5.fasta, sample5.gff  
+  sample6.fasta, sample6.gff  
   
 $ /path/to/Asm2sv gfftolist -g reference_genome.gff3      #This will create query list csv
 ```
