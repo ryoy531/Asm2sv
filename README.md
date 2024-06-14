@@ -203,7 +203,7 @@ Then just run a script to start analysis.
 ```
 $ bash cmd_asm2sv_list_for_batch_exec.sh
 ```
-<sup>[Note] In case of large genome like 1 Gb, one command will take ~48 hours. Please use high-performance PC or PC cluster.</sup>  
+<sup>*In case of large genome like 1 Gb, one command will take ~48 hours. Please use high-performance PC or PC cluster.</sup>  
 ####
 
 In `list_for_batch_exec.csv`, each column should include the information like below.
@@ -225,34 +225,42 @@ In `chrname_info.tsv`, information should be described as follows.
 | ------------- | -------- | ----------- |
 | reference | chr01 | chr01 |
 | reference | chr02 | chr02 |
-| sample1 chr01 | sample1_ch01 |
-| sample1 chr02 | sample1_ch02 |
-| sample2 chr01 | sample2_chr01 |
-| sample2 chr02 | sample2_chr02 |
-| sample3 chr01 | sample3ch1 |
-| sample3 chr02 | sample3ch2 |
-| sample4 chr01 | sample4chr1 |
-| sample4 chr02 | sample4chr2 |
-| sample5 chr01 | PREFIX1 |
-| sample5 chr02 | PREFIX2 |
-| sample6 chr01 | PREFIX202301 |
-| sample6 chr02 | PREFIX202302 |
+| sample1 | chr01 | sample1_ch01 |
+| sample1 | chr02 | sample1_ch02 |
+| sample2 | chr01 | sample2_chr01 |
+| sample2 | chr02 | sample2_chr02 |
+| sample3 | chr01 | sample3ch1 |
+| sample3 | chr02 | sample3ch2 |
+| sample4 | chr01 | sample4chr1 |
+| sample4 | chr02 | sample4chr2 |
+| sample5 | chr01 | PREFIX1 |
+| sample5 | chr02 | PREFIX2 |
+| sample6 | chr01 | PREFIX202301 |
+| sample6 | chr02 | PREFIX202302 |
 ####
-<sup>*Header is not necessarily required.</sup>  
 <sup>*`genome_prefix` here is string except the file extention of fasta file (e.g. "sample1.fasta" -> "sample1").</sup>  
   
 If all jobs are finished, the following files will be created.
 ```
 # numeric score data for gene-SV
 $ ls asm2sv_*/rev_summary_*  
-  asm2sv_genome_1/rev_summary_genome2sv_sample_genome_1.tsv  
-  asm2sv_genome_2/rev_summary_genome2sv_sample_genome_2.tsv  
-  asm2sv_genome_3/rev_summary_genome2sv_sample_genome_3.tsv  
-  asm2sv_reference/rev_summary_genome2sv_reference_genome.tsv
+  asm2sv_reference/rev_summary_asm2sv_reference.tsv  
+  asm2sv_1/rev_summary_asm2sv_sample1.tsv
+  asm2sv_2/rev_summary_asm2sv_sample2.tsv
+  asm2sv_3/rev_summary_asm2sv_sample3.tsv
+  asm2sv_4/rev_summary_asm2sv_sample4.tsv
+  asm2sv_5/rev_summary_asm2sv_sample5.tsv  
+  asm2sv_6/rev_summary_asm2sv_sample6.tsv
 
 # VCF data for gene-SV
-$ ls asm2sv_*/rev2sv/*.vcf
-
+$ ls asm2sv_*/rev2sv/*.vcf | grep genebased  
+  asm2sv_reference/rev2sv/genebased_asm2sv_reference.vcf
+  asm2sv_1/rev2sv/genebased_asm2sv_sample1.vcf
+  asm2sv_2/rev2sv/genebased_asm2sv_sample2.vcf
+  asm2sv_3/rev2sv/genebased_asm2sv_sample3.vcf
+  asm2sv_4/rev2sv/genebased_asm2sv_sample4.vcf
+  asm2sv_5/rev2sv/genebased_asm2sv_sample5.vcf
+  asm2sv_6/rev2sv/genebased_asm2sv_sample6.vcf
 ```
 --  
 [optional] To save computing  time, user can specify preliminary analyzed genomic alignment data as hint (.psl file). It can be obtained with the following commands (may require >1 TB RAM in case of >500 Mb genome). If absent, just describe `null` in the column 4.  
@@ -264,45 +272,33 @@ $ maf-convert psl [alignment maf] > [alignment psl]
 ####
 
 ___
-#### Step.4 Unite the results of multiple target genomes to generate a genotype table.  
+#### Step.3 Unite gene-SV numeric scores of multiple target genomes to generate an unified table.  
 
-By the following command, the result files o Step. 3 are united to generate a genotype table. A directory named `combined_asm2sv` will be created.  
+Following command will unify the result files of Step. 2B. New directory named `combined_asm2sv_list_for_batch_exec` will be created.  
 ```
 $ /path/to/Asm2sv unite -i list_for_batch_exec.csv -c chrname_info.tsv
 ```
 ####
-
-In the `chrname_info.tsv` file, chromosome ID alias information is described like below.
-| genome prefix | alias ID | original ID |
-| ------------- | -------- | ----------- |
-| reference_genome | chr01 | chr01 |
-| reference_genome | chr02 | chr02 |
-| sample_genome_1 | chr01 | sample1_ch01 |
-| sample_genome_1 | chr02 | sample1_ch02 |
-| sample_genome_2 | chr01 | sample2chr1 |
-| sample_genome_2 | chr02 | sample2chr2 |
-| sample_genome_3 | chr01 | PREFIX202301 |
-| sample_genome_3 | chr02 | PREFIX202302 |  
-####
-<sup>[Note] No header required.</sup>  
-
-The `Asm2sv unite` command produces several types of output files. They are dependent on differenct data summarizing policies.    
-- `A1`: Score approaches ‘0’ dependent on the degree of disruption regardless of indel.  
+  
+The `Asm2sv unite` command produces several kinds of output files. They are dependent on differenct summarizing policies.    
+- `A1`: Score approaches ‘0’ dependent on the degree of disruption regardless of SV type (insertion or deletion).  
 - `A2`: Lower score (0 to 1) for deletion, larger score (>1) for insertion.  
 ####
 
 For example, the following data files are based on different combination of `policy A1 / A2` and `B1 / B2`.  
 | file name | type | target |
 | --------- | ----------- | ------ |
-| sum_disrupt_q-4.csv | `A1` | gene, promoter, and UTR |
-| gene_dirsupt_q-4.csv | `A1` | gene region |
-| promoter_disrupt_q-4.csv | `A1` | promoter |
-| 3UTR_disrupt_q-4.csv | `A1` | 3'-UTR |
-| sum_indel_q-4.csv | `A2` | sum of gene, promoter, and UTR |
-| gene_indel_q-4.csv | `A2` | gene region |
-| promoter_indel_q-4.csv | `A2` | promoter |
-| 3UTR_indel_q-4.csv | `A2` | 3'-UTR |
-| protein_q-4.csv | `A2` | protein (*trial) |  
+| sum_disrupt_q-7.csv | `A1` | gene, promoter, and UTR |
+| gene_dirsupt_q-7.csv | `A1` | gene region |
+| promoter_disrupt_q-7.csv | `A1` | promoter |
+| 3UTR_disrupt_q-7.csv | `A1` | 3'-UTR |
+| sum_indel_q-7.csv | `A2` | sum of gene, promoter, and UTR |
+| gene_indel_q-7.csv | `A2` | gene region |
+| promoter_indel_q-7.csv | `A2` | promoter |
+| 3UTR_indel_q-7.csv | `A2` | 3'-UTR |
+| protein_q-7.csv | `A2` | protein (*trial) |  
+  
+[Note] `A1` scores are assumed to be used to evaluate whether gene function is conserved between distinct genomes while `A2` scores are used to simply compare how sequences are different between genomes.  
   
 <sup>[[Back to TOP]](#TOP)</sup>  
 ####
