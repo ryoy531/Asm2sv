@@ -306,6 +306,7 @@ ___
 #### Step.4 (optional) Prepare VCF for pangenome reference construction.  
 
 This step describes how to integrate Asm2sv's gene-SV VCF with those of cactus-pangenome then use it for pangenome reference construction. Because it relies on the functions of two third party tools `Minigraph-cactus` and `Vg`, user needs to cite these papers.  
+  
 First, run `splitseq_run_cactus.pl` from Asm2sv pipeline to prepare VCF with `cactus-pangenome`. This script splits reference fasta and obtain VCF in each sequence entry. 
 ```
 $ /path/to/Asm2sv/scripts/splitseq_run_cactus.pl -l list_for_batch_exec.csv -c chrname_info.tsv -t 64 -p 2
