@@ -132,9 +132,9 @@ ___
 # command line example of comparing reference.fasta/GFF and sample1.fasta/GFF
 $ /path/to/Asm2sv run -r reference.fasta -g reference.gff -l summary_gene_reference.csv -q sample1.fasta -s sample1.gff -o asm2sv_1 -t 16 -x 8 -n 5000  
 ```
-*`-n 5000` means Asm2sv will analyze 5000 bp flanking region in each gene.  
-*To output VCF, add `--vcf -c chrname_info.tsv` to the command line. `chrname_info.tsv` is a file that describes "alias for sequence name" (see below).  
-*In case of using SGE grid, add `--1` to the command line.  
+<sup>*`-n 5000` means Asm2sv will analyze 5000 bp flanking region in each gene.<\sup>  
+<sup>*To output VCF, add `--vcf -c chrname_info.tsv` to the command line. `chrname_info.tsv` is a file that describes "alias for sequence name" (see below).<\sup>  
+<sup>*In case of using SGE grid, add `--1` to the command line.<\sup>  
 ####
 
 The result file of the above command will be `./asm2sv_1/rev_summary_asm2sv_sample1.tsv`. Some important columns are described below:  
@@ -184,7 +184,7 @@ By using the 'makecmd' option of Asm2sv, you can prepare command lines of multip
 $ /path/to/Asm2sv makecmd -l list_for_batch_exec.csv -c chrname_info.tsv --vcf -t 16 -x 8 -n 5000  
 ```
 ####
-*`-c chrname_info.tsv --vcf` means Asm2sv will output VCF data in addition to numeric score data.  
+<sup>*`-c chrname_info.tsv --vcf` means Asm2sv will output VCF data in addition to numeric score data (optional).<\sup>  
   
 This command will generate a bash script file named `cmd_asm2sv_list_for_batch_exec.sh` in which multiple command lines are described.  
 ```
