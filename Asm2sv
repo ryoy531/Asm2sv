@@ -9,8 +9,8 @@ use Getopt::Long;
 use Sys::Hostname;
 
 my $version = "#------------------------------------------------------------\n";
-$version .= "Asm2sv version 1.61\n";
-$version .= "last update: [2024\/4\/29]\n";
+$version .= "Asm2sv version 1.71\n";
+$version .= "last update: [2024\/8\/14]\n";
 $version .= "copyright: ryoichi yano\n";
 $version .= "#------------------------------------------------------------\n";
 
