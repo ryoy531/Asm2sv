@@ -359,5 +359,9 @@ This is pre-publication preview version that is aimed at evaluation before publi
 2. Please refrain from disclosure to third parties without our permission.
 3. Pre-publication dataset may be updated or replaced without any notice.  
 
+<a name="License"></a>
+<h2>License</h2>
+
+This project is licensed under the MIT License, see the license.txt file for details.
 
 
