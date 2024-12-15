@@ -275,7 +275,7 @@ ___
 
 Following command will unify the result files of Step. 2B. New directory named `combined_asm2sv_list_for_batch_exec` will be created.  
 ```
-$ /path/to/Asm2sv unite -i list_for_batch_exec.csv -c chrname_info.tsv
+$ /path/to/Asm2sv unite -l list_for_batch_exec.csv -c chrname_info.tsv
 ```
 ####
   
