@@ -310,9 +310,9 @@ This step describes how to integrate Asm2sv's gene-SV VCF with those of cactus-p
 First, run `splitseq_run_cactus.pl` from Asm2sv pipeline to prepare VCF with `cactus-pangenome`. This script splits reference fasta and obtain VCF in each sequence entry. 
 ```
 $ /path/to/Asm2sv/scripts/splitseq_run_cactus.pl -l list_for_batch_exec.csv -c chrname_info.tsv -t 64 -p 2
-```_
+```
 ####
-<sup>*It is essential to install `Minigraph-cactus` and `Vg`.</sup>  
+<sup>*It is essential to install `Minigraph-cactus` and `Vg` to run this script.</sup>  
 <sup>*`-t` and `-p` specify the number of CPU threads and parallel partions, respectively.</sup>  
 <sup>*This will create a VCF file such as `./split_run_cactuspg/cactus_pangenome.vcf`.</sup>  
 
