@@ -354,10 +354,8 @@ Files named `examplePanRef.***` can be used for pangenome resequencing study wit
 <a name="Citation"></a>
 <h2>Citation</h2>
 
-This is pre-publication preview version that is aimed at evaluation before publication. If you access to applications and datasets, you agree to the following conditions.  
-1. Please refrain from publication using the contens of this database and the genome reference dataset before our paper is published.
-2. Please refrain from disclosure to third parties without our permission.
-3. Pre-publication dataset may be updated or replaced without any notice.  
+Please cite the following paper:
+1. Yano et al. Nature genetics 57, pages973–985 (2025) (DOI: 10.1038/s41588-025-02113-5)
 
 <a name="License"></a>
 <h2>License</h2>
