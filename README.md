@@ -355,7 +355,7 @@ Files named `examplePanRef.***` can be used for pangenome resequencing study wit
 <h2>Citation</h2>
 
 Please cite the following paper:
-1. Yano et al. Nature genetics 57, pages973–985 (2025) (DOI: 10.1038/s41588-025-02113-5)
+1. Yano et al. <i>Nature genetics</i> 57, pages973–985 (2025) (DOI: 10.1038/s41588-025-02113-5)
 
 <a name="License"></a>
 <h2>License</h2>
